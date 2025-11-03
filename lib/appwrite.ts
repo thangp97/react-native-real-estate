@@ -74,12 +74,13 @@ export async function getCurrentUser() {
         const response = await account.get();
 
         if (response.$id) {
-            const userAvatar = avatar.getInitials(response.name);
+            console.log(`Current user: ${response.name}`);
+            const userAvatar = avatar.getInitials();
 
             return {
                 ...response,
-                avatar: userAvatar.toString(),
-            }
+                avatar: userAvatar,
+            };
         }
     } catch (e) {
         console.error(e);
