@@ -79,7 +79,7 @@ export async function getCurrentUser() {
 
             return {
                 ...response,
-                avatar: userAvatar,
+                avatar: userAvatar.toString(),
             };
         }
     } catch (e) {
