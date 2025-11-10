@@ -1,6 +1,7 @@
 import {Account, Avatars, Client, OAuthProvider, Databases} from "react-native-appwrite";
 import * as Linking from "expo-linking";
 import {openAuthSessionAsync} from "expo-web-browser";
+import {Query} from "appwrite";
 
 export const config = {
     platform: 'com.ptit.restate',
@@ -91,5 +92,57 @@ export async function getCurrentUser() {
     } catch (e) {
         console.error(e);
         return false;
+    }
+}
+
+export async function getLastestProperties() {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [Query.orderAsc("$createdAt"), Query.limit(5)]
+        );
+
+        return result.documents;
+    } catch (e) {
+        console.error(e);
+        return [];
+    }
+}
+
+export async function getProperties({filter, query, limit}:{
+    filter: string,
+    query: string,
+    limit: number,
+}) {
+    try {
+        const buildQuery = [Query.orderDesc('$createdAt')];
+
+        if (filter && filter != 'All') {
+            buildQuery.push(Query.equal('type',filter));
+        }
+
+        if (query) {
+            buildQuery.push(
+                Query.or([
+                    Query.search('name',query),
+                    Query.search('address',query),
+                    Query.search('type',query),
+                ])
+            );
+        }
+
+        if (limit) buildQuery.push(Query.limit(limit));
+
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            buildQuery,
+        );
+
+        return result.documents;
+    } catch (e) {
+        console.error(e);
+        return [];
     }
 }
