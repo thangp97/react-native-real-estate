@@ -5,7 +5,7 @@ export const config = {
     platform: 'com.ptit.restate',
     projectId: process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID,
     databaseId: process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID,
-    storageId: process.env.EXPO_PUBLIC_APPWRITE_STORAGE_ID, // Thêm dòng này
+    storageId: process.env.EXPO_PUBLIC_APPWRITE_STORAGE_ID,
     profilesCollectionId: 'profiles',
     propertiesCollectionId: 'properties',
 }
@@ -20,11 +20,10 @@ client
 export const account = new Account(client);
 export const avatar = new Avatars(client);
 export const databases = new Databases(client);
-export const storage = new Storage(client); // Thêm dòng này
+export const storage = new Storage(client);
 
 // --- AUTHENTICATION FUNCTIONS ---
 
-// Register User
 export async function createUser(email, password, username, role) {
     try {
         const newAccount = await account.create(
@@ -50,7 +49,6 @@ export async function createUser(email, password, username, role) {
     }
 }
 
-// Sign In with Email/Password
 export async function signIn(email, password) {
     try {
         try { await account.deleteSession('current'); } catch (_) { /* Bỏ qua lỗi nếu không có session */ }
@@ -61,7 +59,6 @@ export async function signIn(email, password) {
     }
 }
 
-// Sign In with Google
 export async function loginWithGoogle() {
     try {
         try { await account.deleteSession('current'); } catch (_) { /* Bỏ qua lỗi nếu không có session */ }
@@ -77,7 +74,6 @@ export async function loginWithGoogle() {
     }
 }
 
-// Get Current User
 export async function getCurrentUser() {
     try {
         const currentAccount = await account.get();
@@ -102,7 +98,7 @@ export async function getCurrentUser() {
                     config.profilesCollectionId!,
                     currentAccount.$id,
                     {
-                        role: 'buyer' // Gán vai trò mặc định
+                        role: 'buyer'
                     }
                 );
                 return { ...currentAccount, ...newProfile };
@@ -117,7 +113,6 @@ export async function getCurrentUser() {
     }
 }
 
-// Sign Out
 export async function signOut() {
     try {
         return await account.deleteSession('current');
@@ -129,7 +124,8 @@ export async function signOut() {
 
 
 // --- DATABASE FUNCTIONS ---
-export async function getUserProperties(userId) {
+// **FIX: Sửa lại định nghĩa hàm để nhận một đối tượng**
+export async function getUserProperties({ userId }) {
     if (!userId) return [];
     try {
         const result = await databases.listDocuments(
@@ -192,7 +188,7 @@ export async function getPropertyById({ id }) {
             id
         );
         return result;
-    } catch (error) {_
+    } catch (error) {
         console.error(error);
         return null;
     }
