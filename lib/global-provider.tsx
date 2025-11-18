@@ -3,6 +3,7 @@ import {useAppwrite} from "@/lib/useAppwrite";
 import {getCurrentUser} from "./appwrite";
 
 interface User {
+    role: string;
     $id: string;
     name: string;
     email: string;

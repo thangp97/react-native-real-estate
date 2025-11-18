@@ -1,17 +1,13 @@
-import {Account, Avatars, Client, OAuthProvider, Databases} from "react-native-appwrite";
-import * as Linking from "expo-linking";
-import {openAuthSessionAsync} from "expo-web-browser";
-import {Query} from "appwrite";
+import {Account, Avatars, Client, Databases, ID, Query, Storage} from "react-native-appwrite";
 
 export const config = {
-    platform: 'com.ptit.restate',
     endpoint: process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT,
+    platform: 'com.ptit.restate',
     projectId: process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID,
     databaseId: process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID,
-    galleriesCollectionId: process.env.EXPO_PUBLIC_APPWRITE_GALLERIES_COLLECTION_ID,
-    reviewsCollectionId: process.env.EXPO_PUBLIC_APPWRITE_REVIEWS_COLLECTION_ID,
-    agentsCollectionId: process.env.EXPO_PUBLIC_APPWRITE_AGENT_COLLECTION_ID,
-    propertiesCollectionId: process.env.EXPO_PUBLIC_APPWRITE_PROPERTIES_COLLECTION_ID,
+    storageId: process.env.EXPO_PUBLIC_APPWRITE_STORAGE_ID, // Thêm dòng này
+    profilesCollectionId: 'profiles',
+    propertiesCollectionId: 'properties',
 }
 
 export const client = new Client();
@@ -19,79 +15,132 @@ export const client = new Client();
 client
     .setEndpoint(config.endpoint!)
     .setProject(config.projectId!)
-    .setPlatform(config.platform!)
+    .setPlatform(config.platform!);
 
-export const avatar = new Avatars(client);
 export const account = new Account(client);
+export const avatar = new Avatars(client);
 export const databases = new Databases(client);
+export const storage = new Storage(client); // Thêm dòng này
 
-export async function login() {
+// --- AUTHENTICATION FUNCTIONS ---
+
+// Register User
+export async function createUser(email, password, username, role) {
     try {
-        const redirectUri = Linking.createURL('/');
-
-        const response = await account.createOAuth2Token({
-            provider: OAuthProvider.Google,
-            success: redirectUri
-        });
-
-        if (!response) throw new Error("Failed to login");
-
-        const browserResult = await openAuthSessionAsync(
-            response.toString(),
-            redirectUri
+        const newAccount = await account.create(
+            ID.unique(),
+            email,
+            password,
+            username
         );
 
-        if (browserResult.type !== 'success') throw new Error("Failed to login");
+        if (!newAccount) throw Error("Không thể tạo tài khoản");
 
-        const url = new URL(browserResult.url);
-
-        const secret = url.searchParams.get("secret")?.toString();
-        const userId = url.searchParams.get("userId")?.toString();
-
-        if (!secret || !userId) throw new Error("Failed to login");
-
-        const session = await account.createSession({
-            userId: userId,
-            secret: secret,
-        });
-
-        if(!session) throw new Error("Failed to create a session");
-
-        return true;
-    } catch (e) {
-        console.error(e);
-        return false;
+        return await databases.createDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            newAccount.$id,
+            {
+                role: role 
+            }
+        );
+    } catch (error) {
+        console.log("Lỗi createUser:", error);
+        throw new Error(error);
     }
 }
 
-export async function logout() {
+// Sign In with Email/Password
+export async function signIn(email, password) {
     try {
-        await account.deleteSession({
-            sessionId: 'current',
-        });
+        try { await account.deleteSession('current'); } catch (_) { /* Bỏ qua lỗi nếu không có session */ }
+        return await account.createEmailPasswordSession(email, password);
+    } catch (error) {
+        console.log("Lỗi signIn:", error);
+        throw new Error(error);
+    }
+}
+
+// Sign In with Google
+export async function loginWithGoogle() {
+    try {
+        try { await account.deleteSession('current'); } catch (_) { /* Bỏ qua lỗi nếu không có session */ }
+        await account.createOAuth2Session(
+            'google',
+            'restate://callback',
+            'restate://failure'
+        );
         return true;
     } catch (e) {
-        console.error(e);
+        console.error("Lỗi đăng nhập Google:", e);
         return false;
     }
 }
 
+// Get Current User
 export async function getCurrentUser() {
     try {
-        const response = await account.get();
+        const currentAccount = await account.get();
+        if (!currentAccount) return null;
 
-        if (response.$id) {
-            console.log(`Current user: ${response.name}`);
-            const userAvatar = avatar.getInitials();
+        const userProfile = await databases.getDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            currentAccount.$id
+        );
 
-            return {
-                ...response,
-                avatar: userAvatar.toString(),
-            };
+        return { ...currentAccount, ...userProfile };
+
+    } catch (error) {
+        if (error.code === 404) {
+            try {
+                console.log("Không tìm thấy profile, đang tự động tạo...");
+                const currentAccount = await account.get();
+                
+                const newProfile = await databases.createDocument(
+                    config.databaseId!,
+                    config.profilesCollectionId!,
+                    currentAccount.$id,
+                    {
+                        role: 'buyer' // Gán vai trò mặc định
+                    }
+                );
+                return { ...currentAccount, ...newProfile };
+            } catch (createError) {
+                console.error("Lỗi khi đang tự tạo profile:", createError);
+                return null;
+            }
+        } else {
+            console.error("Lỗi không xác định trong getCurrentUser:", error);
+            return null;
         }
+    }
+}
+
+// Sign Out
+export async function signOut() {
+    try {
+        return await account.deleteSession('current');
+    } catch (error) {
+        console.log("Lỗi signOut:", error);
+        throw new Error(error);
+    }
+}
+
+
+// --- DATABASE FUNCTIONS ---
+export async function getUserProperties(userId) {
+    if (!userId) return [];
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [Query.equal('sellerId', userId), Query.orderDesc('$createdAt')]
+        );
+        return result.documents;
     } catch (e) {
-        console.error(e);
-        return false;
+        console.error("Lỗi khi lấy BĐS của người dùng:", e);
+        return [];
     }
 }
 
@@ -100,9 +149,8 @@ export async function getLastestProperties() {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
-            [Query.orderAsc("$createdAt"), Query.limit(5)]
+            [Query.orderDesc("$createdAt"), Query.limit(5)]
         );
-
         return result.documents;
     } catch (e) {
         console.error(e);
@@ -110,36 +158,25 @@ export async function getLastestProperties() {
     }
 }
 
-export async function getProperties({filter, query, limit}:{
-    filter: string,
-    query: string,
-    limit: number,
-}) {
+export async function getProperties({filter, query, limit}) {
     try {
         const buildQuery = [Query.orderDesc('$createdAt')];
-
-        if (filter && filter != 'All') {
-            buildQuery.push(Query.equal('type',filter));
+        if (filter && filter !== 'All') {
+            buildQuery.push(Query.equal('type', filter));
         }
-
         if (query) {
-            buildQuery.push(
-                Query.or([
-                    Query.search('name',query),
-                    Query.search('address',query),
-                    Query.search('type',query),
-                ])
-            );
+            buildQuery.push(Query.or([
+                Query.search('name', query),
+                Query.search('address', query),
+                Query.search('type', query),
+            ]));
         }
-
         if (limit) buildQuery.push(Query.limit(limit));
-
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
             buildQuery,
         );
-
         return result.documents;
     } catch (e) {
         console.error(e);
@@ -147,7 +184,7 @@ export async function getProperties({filter, query, limit}:{
     }
 }
 
-export async function getPropertyById({ id }: { id: string }) {
+export async function getPropertyById({ id }) {
     try {
         const result = await databases.getDocument(
             config.databaseId!,
@@ -155,7 +192,7 @@ export async function getPropertyById({ id }: { id: string }) {
             id
         );
         return result;
-    } catch (error) {
+    } catch (error) {_
         console.error(error);
         return null;
     }
