@@ -35,12 +35,17 @@ export async function createUser(email, password, username, role) {
 
         if (!newAccount) throw Error("Không thể tạo tài khoản");
 
+        const avatarUrl = avatar.getInitials(username);
+
         return await databases.createDocument(
             config.databaseId!,
             config.profilesCollectionId!,
             newAccount.$id,
             {
-                role: role 
+                role: role,
+                name: username,
+                email: email,
+                avatar: avatarUrl.href,
             }
         );
     } catch (error) {
@@ -92,13 +97,17 @@ export async function getCurrentUser() {
             try {
                 console.log("Không tìm thấy profile, đang tự động tạo...");
                 const currentAccount = await account.get();
+                const avatarUrl = avatar.getInitials(currentAccount.name);
                 
                 const newProfile = await databases.createDocument(
                     config.databaseId!,
                     config.profilesCollectionId!,
                     currentAccount.$id,
                     {
-                        role: 'buyer'
+                        role: 'buyer',
+                        name: currentAccount.name,
+                        email: currentAccount.email,
+                        avatar: avatarUrl.href
                     }
                 );
                 return { ...currentAccount, ...newProfile };
@@ -145,7 +154,7 @@ export async function getLastestProperties() {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
-            [Query.orderDesc("$createdAt"), Query.limit(5)]
+            [Query.or([Query.equal('status', 'available'), Query.equal('status', 'sold')]), Query.orderDesc("$createdAt"), Query.limit(5)]
         );
         return result.documents;
     } catch (e) {
@@ -156,7 +165,7 @@ export async function getLastestProperties() {
 
 export async function getProperties({filter, query, limit}) {
     try {
-        const buildQuery = [Query.orderDesc('$createdAt')];
+        const buildQuery = [Query.or([Query.equal('status', 'available'), Query.equal('status', 'sold')]), Query.orderDesc('$createdAt')];
         if (filter && filter !== 'All') {
             buildQuery.push(Query.equal('type', filter));
         }
@@ -182,14 +191,33 @@ export async function getProperties({filter, query, limit}) {
 
 export async function getPropertyById({ id }) {
     try {
-        const result = await databases.getDocument(
+        if (!id) {
+            console.error("ID bất động sản không hợp lệ");
+            return null;
+        }
+
+        const property = await databases.getDocument(
             config.databaseId!,
             config.propertiesCollectionId!,
             id
         );
-        return result;
+
+        if (!property) return null;
+
+        if (property.sellerId) {
+            const sellerProfile = await databases.getDocument(
+                config.databaseId!,
+                config.profilesCollectionId!,
+                property.sellerId
+            );
+            // Gán thông tin người bán vào một trường mới, ví dụ `agent`
+            property.agent = sellerProfile;
+        }
+
+        return property;
+
     } catch (error) {
-        console.error(error);
+        console.error("Lỗi khi lấy chi tiết bất động sản:", error);
         return null;
     }
 }

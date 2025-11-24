@@ -18,6 +18,33 @@ import { facilities } from "@/constants/data";
 import { useAppwrite } from "@/lib/useAppwrite";
 import { getPropertyById } from "@/lib/appwrite";
 
+type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';
+
+// Hàm helper để định dạng trạng thái và màu sắc
+const formatStatus = (status: PropertyStatus) => {
+    const statuses: Record<PropertyStatus, string> = {
+        'pending_approval': 'Chờ duyệt',
+        'for_sale': 'Đang bán',
+        'deposit_paid': 'Đã cọc',
+        'sold': 'Đã bán',
+        'rejected': 'Bị từ chối',
+        'expired': 'Hết hạn'
+    };
+    return statuses[status] || status;
+};
+
+const getStatusColor = (status: PropertyStatus) => {
+    const colors: Record<PropertyStatus, string> = {
+        'pending_approval': '#f0ad4e', // Vàng
+        'for_sale': '#5cb85c',       // Xanh lá
+        'deposit_paid': '#337ab7',       // Xanh dương
+        'sold': '#d9534f',       // Đỏ
+        'rejected': '#777',          // Xám
+        'expired': '#777'           // Xám
+    };
+    return colors[status] || '#777';
+};
+
 const Property = () => {
     const { id } = useLocalSearchParams<{ id?: string }>();
 
@@ -78,12 +105,20 @@ const Property = () => {
                         {property?.name}
                     </Text>
 
-                    <View className="flex flex-row items-center gap-3">
+                    <View className="flex flex-row items-center gap-3 flex-wrap">
                         <View className="flex flex-row items-center px-4 py-2 bg-primary-100 rounded-full">
                             <Text className="text-xs font-rubik-bold text-primary-300">
                                 {property?.type}
                             </Text>
                         </View>
+
+                        {property?.status && (
+                            <View style={{ backgroundColor: getStatusColor(property.status) }} className="flex flex-row items-center px-4 py-2 rounded-full">
+                                <Text className="text-xs font-rubik-bold text-white">
+                                    {formatStatus(property.status)}
+                                </Text>
+                            </View>
+                        )}
 
                         <View className="flex flex-row items-center gap-2">
                             <Image source={icons.star} className="size-5" />
@@ -122,16 +157,16 @@ const Property = () => {
                         <View className="flex flex-row items-center justify-between mt-4">
                             <View className="flex flex-row items-center">
                                 <Image
-                                    source={{ uri: property?.agent.avatar }}
+                                    source={{ uri: property?.agent?.avatar }}
                                     className="size-14 rounded-full"
                                 />
 
                                 <View className="flex flex-col items-start justify-center ml-3">
                                     <Text className="text-lg text-black-300 text-start font-rubik-bold">
-                                        {property?.agent.name}
+                                        {property?.agent?.name}
                                     </Text>
                                     <Text className="text-sm text-black-200 text-start font-rubik-medium">
-                                        {property?.agent.email}
+                                        {property?.agent?.email}
                                     </Text>
                                 </View>
                             </View>
@@ -268,11 +303,19 @@ const Property = () => {
                         </Text>
                     </View>
 
-                    <TouchableOpacity className="flex-1 flex flex-row items-center justify-center bg-primary-300 py-3 rounded-full shadow-md shadow-zinc-400">
-                        <Text className="text-white text-lg text-center font-rubik-bold">
-                            Book Now
-                        </Text>
-                    </TouchableOpacity>
+                    {property?.status === 'sold' ? (
+                        <View className="flex-1 flex flex-row items-center justify-center bg-gray-400 py-3 rounded-full">
+                            <Text className="text-white text-lg text-center font-rubik-bold">
+                                Đã bán
+                            </Text>
+                        </View>
+                    ) : (
+                        <TouchableOpacity className="flex-1 flex flex-row items-center justify-center bg-primary-300 py-3 rounded-full shadow-md shadow-zinc-400">
+                            <Text className="text-white text-lg text-center font-rubik-bold">
+                                Book Now
+                            </Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
         </View>
