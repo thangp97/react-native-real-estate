@@ -64,21 +64,6 @@ export async function signIn(email, password) {
     }
 }
 
-export async function loginWithGoogle() {
-    try {
-        try { await account.deleteSession('current'); } catch (_) { /* Bỏ qua lỗi nếu không có session */ }
-        await account.createOAuth2Session(
-            'google',
-            'restate://callback',
-            'restate://failure'
-        );
-        return true;
-    } catch (e) {
-        console.error("Lỗi đăng nhập Google:", e);
-        return false;
-    }
-}
-
 export async function getCurrentUser() {
     try {
         const currentAccount = await account.get();
@@ -219,5 +204,45 @@ export async function getPropertyById({ id }) {
     } catch (error) {
         console.error("Lỗi khi lấy chi tiết bất động sản:", error);
         return null;
+    }
+}
+
+export async function uploadFile(file: any) {
+    if (!file) return null;
+
+    const asset = {
+        name: file.fileName || `${ID.unique()}.jpg`,
+        type: file.mimeType,
+        size: file.fileSize,
+        uri: file.uri,
+    };
+
+    try {
+        const uploadedFile = await storage.createFile(
+            config.storageId!,
+            ID.unique(),
+            asset
+        );
+
+        const fileUrl = storage.getFilePreview(config.storageId!, uploadedFile.$id, 2000, 2000, 'top', 100);
+        return fileUrl;
+    } catch (error) {
+        console.error('Lỗi tải file:', error);
+        throw error;
+    }
+};
+
+export async function updateUserProfile(userId: string, data: object) {
+    try {
+        const updatedProfile = await databases.updateDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            userId,
+            data
+        );
+        return updatedProfile;
+    } catch (error) {
+        console.error('Lỗi cập nhật hồ sơ:', error);
+        throw error;
     }
 }

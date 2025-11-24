@@ -123,7 +123,7 @@ const Property = () => {
                         <View className="flex flex-row items-center gap-2">
                             <Image source={icons.star} className="size-5" />
                             <Text className="text-black-200 text-sm mt-1 font-rubik-medium">
-                                {property?.rating} ({property?.reviews?.length ?? 0} reviews)
+                                {`${property?.rating || ''} (${property?.reviews?.length ?? 0} đánh giá)`}
                             </Text>
                         </View>
                     </View>
@@ -133,25 +133,25 @@ const Property = () => {
                             <Image source={icons.bed} className="size-4" />
                         </View>
                         <Text className="text-black-300 text-sm font-rubik-medium ml-2">
-                            {property?.bedrooms} Beds
+                            {`${property?.bedrooms || ''} phòng ngủ`}
                         </Text>
                         <View className="flex flex-row items-center justify-center bg-primary-100 rounded-full size-10 ml-7">
                             <Image source={icons.bath} className="size-4" />
                         </View>
                         <Text className="text-black-300 text-sm font-rubik-medium ml-2">
-                            {property?.bathrooms} Baths
+                            {`${property?.bathrooms || ''} phòng tắm`}
                         </Text>
                         <View className="flex flex-row items-center justify-center bg-primary-100 rounded-full size-10 ml-7">
                             <Image source={icons.area} className="size-4" />
                         </View>
                         <Text className="text-black-300 text-sm font-rubik-medium ml-2">
-                            {property?.area} sqft
+                            {`${property?.area || ''} m²`}
                         </Text>
                     </View>
 
                     <View className="w-full border-t border-primary-200 pt-7 mt-5">
                         <Text className="text-black-300 text-xl font-rubik-bold">
-                            Agent
+                            Người bán
                         </Text>
 
                         <View className="flex flex-row items-center justify-between mt-4">
@@ -180,7 +180,7 @@ const Property = () => {
 
                     <View className="mt-7">
                         <Text className="text-black-300 text-xl font-rubik-bold">
-                            Overview
+                            Tổng quan
                         </Text>
                         <Text className="text-black-200 text-base font-rubik mt-2">
                             {property?.description}
@@ -189,7 +189,7 @@ const Property = () => {
 
                     <View className="mt-7">
                         <Text className="text-black-300 text-xl font-rubik-bold">
-                            Facilities
+                            Tiện nghi
                         </Text>
 
                         {property?.facilities?.length > 0 && (
@@ -228,7 +228,7 @@ const Property = () => {
                     {property?.gallery?.length > 0 && (
                         <View className="mt-7">
                             <Text className="text-black-300 text-xl font-rubik-bold">
-                                Gallery
+                                Thư viện ảnh
                             </Text>
                             <FlatList
                                 contentContainerStyle={{ paddingRight: 20 }}
@@ -249,7 +249,7 @@ const Property = () => {
 
                     <View className="mt-7">
                         <Text className="text-black-300 text-xl font-rubik-bold">
-                            Location
+                            Vị trí
                         </Text>
                         <View className="flex flex-row items-center justify-start mt-4 gap-2">
                             <Image source={icons.location} className="w-7 h-7" />
@@ -270,13 +270,13 @@ const Property = () => {
                                 <View className="flex flex-row items-center">
                                     <Image source={icons.star} className="size-6" />
                                     <Text className="text-black-300 text-xl font-rubik-bold ml-2">
-                                        {property?.rating} ({property?.reviews.length} reviews)
+                                        {property?.rating} ({property?.reviews.length} đánh giá)
                                     </Text>
                                 </View>
 
                                 <TouchableOpacity>
                                     <Text className="text-primary-300 text-base font-rubik-bold">
-                                        View All
+                                        Xem tất cả
                                     </Text>
                                 </TouchableOpacity>
                             </View>
@@ -293,13 +293,13 @@ const Property = () => {
                 <View className="flex flex-row items-center justify-between gap-10">
                     <View className="flex flex-col items-start">
                         <Text className="text-black-200 text-xs font-rubik-medium">
-                            Price
+                            Giá
                         </Text>
                         <Text
                             numberOfLines={1}
                             className="text-primary-300 text-start text-2xl font-rubik-bold"
                         >
-                            ${property?.price}
+                            {property?.price ? `${property.price.toLocaleString('vi-VN')} VND` : ''}
                         </Text>
                     </View>
 
@@ -312,7 +312,7 @@ const Property = () => {
                     ) : (
                         <TouchableOpacity className="flex-1 flex flex-row items-center justify-center bg-primary-300 py-3 rounded-full shadow-md shadow-zinc-400">
                             <Text className="text-white text-lg text-center font-rubik-bold">
-                                Book Now
+                                Liên hệ
                             </Text>
                         </TouchableOpacity>
                     )}

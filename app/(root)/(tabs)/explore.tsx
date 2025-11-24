@@ -58,7 +58,7 @@ export default function Explore() {
                                   <Image source={icons.backArrow} className={"size-5"}/>
                               </TouchableOpacity>
                               <Text className={"text-base mr-2 text-center font-rubik-medium text-black-300"}>
-                                  Search for Your Ideal Home
+                                  Tìm kiếm ngôi nhà lý tưởng
                               </Text>
                               <Image source={icons.bell} className={"w-6 h-6"} />
                           </View>
@@ -67,7 +67,7 @@ export default function Explore() {
                               <Filters />
 
                               <Text className={"text-xl font-rubik-bold text-black-300 mt-5"}>
-                                  Found {properties?.length} Properties
+                                  {`Tìm thấy ${properties?.length || 0} bất động sản`}
                               </Text>
                           </View>
                       </View>}
