@@ -124,7 +124,6 @@ export async function signOut() {
 
 
 // --- DATABASE FUNCTIONS ---
-// **FIX: Sửa lại định nghĩa hàm để nhận một đối tượng**
 export async function getUserProperties({ userId }) {
     if (!userId) return [];
     try {
@@ -190,6 +189,23 @@ export async function getPropertyById({ id }) {
         return result;
     } catch (error) {
         console.error(error);
+        return null;
+    }
+}
+
+// **FIX: Thêm hàm mới để lấy thông tin Agent**
+export async function getAgentById({ agentId }) {
+    if (!agentId) return null;
+    try {
+        // Agent cũng là user, nên ta sẽ lấy thông tin từ collection 'profiles'
+        const result = await databases.getDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            agentId
+        );
+        return result;
+    } catch (error) {
+        console.error("Lỗi khi lấy thông tin agent:", error);
         return null;
     }
 }
