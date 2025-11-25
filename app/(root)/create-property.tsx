@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import { View, Text, TextInput, Button, Alert, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, FlatList } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useState, useEffect } from 'react';
+import { View, Text, TextInput, Button, Alert, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, FlatList, ActivityIndicator } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { databases, storage, config } from '@/lib/appwrite';
+import { databases, storage, config, getPropertyById } from '@/lib/appwrite';
 import { ID } from 'react-native-appwrite';
 import { useGlobalContext } from '@/lib/global-provider';
 import { ImagePickerAsset } from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import icons from '@/constants/icons';
 
 const PROPERTY_TYPES = ['House', 'Townhouse', 'Condo', 'Duplex', 'Studio', 'Villa', 'Apartment', 'Others'];
 
@@ -59,12 +60,16 @@ interface PropertyForm {
     area: string;
     bedrooms: string;
     bathrooms: string;
-    photos: ImagePickerAsset[];
+    photos: (ImagePickerAsset | { uri: string })[];
 }
 
 const CreateProperty = () => {
+    const { id: propertyId } = useLocalSearchParams<{ id?: string }>();
+    const isEditing = !!propertyId;
+
     const { user } = useGlobalContext();
     const router = useRouter();
+    const [loading, setLoading] = useState(isEditing);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isPickerVisible, setIsPickerVisible] = useState(false);
     const [form, setForm] = useState<PropertyForm>({
@@ -79,6 +84,36 @@ const CreateProperty = () => {
         bathrooms: '',
         photos: []
     });
+
+    useEffect(() => {
+        if (isEditing) {
+            const fetchPropertyData = async () => {
+                setLoading(true);
+                try {
+                    const property = await getPropertyById({ id: propertyId! });
+                    if (property) {
+                        setForm({
+                            name: property.name,
+                            description: property.description,
+                            price: property.price.toString(),
+                            address: property.address,
+                            region: property.region as RegionKey,
+                            type: property.type,
+                            area: property.area.toString(),
+                            bedrooms: property.bedrooms.toString(),
+                            bathrooms: property.bathrooms.toString(),
+                            photos: [{ uri: property.image }]
+                        });
+                    }
+                } catch (error) {
+                    Alert.alert("Lỗi", "Không thể tải dữ liệu bài đăng.");
+                } finally {
+                    setLoading(false);
+                }
+            };
+            fetchPropertyData();
+        }
+    }, [propertyId]);
 
     const openPicker = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -98,23 +133,10 @@ const CreateProperty = () => {
 
     const uploadFile = async (file: ImagePickerAsset) => {
         if (!file || !file.mimeType || !file.fileSize) return null;
-        
-        const asset = {
-            name: file.fileName || `${ID.unique()}.jpg`,
-            type: file.mimeType,
-            size: file.fileSize,
-            uri: file.uri,
-        };
+        const asset = { name: file.fileName || `${ID.unique()}.jpg`, type: file.mimeType, size: file.fileSize, uri: file.uri };
         try {
-            const uploadedFile = await storage.createFile(
-                config.storageId!,
-                ID.unique(),
-                asset
-            );
-            
-            const fileUrl = `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
-            return fileUrl;
-
+            const uploadedFile = await storage.createFile(config.storageId!, ID.unique(), asset);
+            return `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
         } catch (error) {
             console.error('Lỗi tải file:', error);
             throw error;
@@ -122,55 +144,37 @@ const CreateProperty = () => {
     };
 
     const handleSubmit = async () => {
-        if (!config.databaseId || !config.storageId) {
-            Alert.alert('Lỗi cấu hình', 'Vui lòng kiểm tra lại các biến môi trường Appwrite.');
-            return;
-        }
-        if (!form.name || !form.price || !form.address || !user || form.photos.length === 0) {
-            Alert.alert('Lỗi', 'Vui lòng điền đầy đủ các trường bắt buộc và chọn ít nhất 1 ảnh.');
-            return;
-        }
         setIsSubmitting(true);
-
         try {
-            const coverImageUrl = await uploadFile(form.photos[0]);
-            if (!coverImageUrl) {
-                throw new Error("Không thể tải ảnh đại diện.");
-            }
-
-            // **FIX: Sắp xếp lại đối tượng dữ liệu theo yêu cầu của bạn**
             const data = {
+                sellerId: user!.$id,
                 name: form.name,
-                expiresAt: null,
-                type: form.type,
                 description: form.description,
-                address: form.address,
                 price: parseInt(form.price),
+                address: form.address,
+                region: form.region,
+                type: form.type,
                 area: parseFloat(form.area),
                 bedrooms: parseInt(form.bedrooms),
                 bathrooms: parseInt(form.bathrooms),
                 rating: 0,
-                facilities: [],
-                image: coverImageUrl,
-                brokerId: null,
-                // gallery và reviews là relationship, không cần thêm ở đây
-                status: 'pending_approval',
-                sellerId: user.$id,
-                region: form.region,
+                status: 'pending_approval'
             };
 
-            await databases.createDocument(
-                config.databaseId!,
-                'properties',
-                ID.unique(),
-                data
-            );
-
-            Alert.alert('Thành công', 'Bài đăng của bạn đã được gửi đi và đang chờ phê duyệt.');
+            if (isEditing) {
+                await databases.updateDocument(config.databaseId!, 'properties', propertyId!, data);
+                Alert.alert('Thành công', 'Đã cập nhật bài đăng.');
+            } else {
+                const coverImageUrl = await uploadFile(form.photos[0] as ImagePickerAsset);
+                if (!coverImageUrl) throw new Error("Không thể tải ảnh đại diện.");
+                const newProperty = await databases.createDocument(config.databaseId!, 'properties', ID.unique(), { ...data, image: coverImageUrl });
+                const galleryPromises = form.photos.map(photo => uploadFile(photo as ImagePickerAsset).then(url => {
+                    if (url) databases.createDocument(config.databaseId!, config.galleriesCollectionId!, ID.unique(), { propertyId: newProperty.$id, image: url, uploaderId: user!.$id });
+                }));
+                await Promise.all(galleryPromises);
+            }
             router.push('/my-properties');
-
         } catch (error: any) {
-            console.error('Lỗi đăng bài:', error);
             Alert.alert('Lỗi', `Đã có lỗi xảy ra: ${error.message}`);
         } finally {
             setIsSubmitting(false);
@@ -182,16 +186,26 @@ const CreateProperty = () => {
         setIsPickerVisible(false);
     };
 
+    if (loading) {
+        return <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator size="large" /></View>;
+    }
+
     return (
-        <SafeAreaView style={{flex: 1, backgroundColor: '#fff'}}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
             <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }}>
-                <Text style={styles.title}>Đăng tin Bất động sản</Text>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                        <Image source={icons.backArrow} style={{ width: 24, height: 24 }} tintColor="#333" />
+                    </TouchableOpacity>
+                    <Text style={styles.title}>{isEditing ? 'Chỉnh sửa tin' : 'Đăng tin Bất động sản'}</Text>
+                </View>
 
                 <Text style={styles.label}>Tên bài đăng</Text>
                 <TextInput style={styles.input} placeholder="Ví dụ: Bán nhà mặt tiền Quận 1" value={form.name} onChangeText={(e) => setForm({ ...form, name: e })} />
                 
                 <Text style={styles.label}>Mô tả chi tiết</Text>
-                <TextInput style={styles.input} placeholder="Mô tả về vị trí, tiện ích, nội thất..." value={form.description} onChangeText={(e) => setForm({ ...form, description: e })} multiline numberOfLines={4} />
+                {/* **FIX: Áp dụng style mới cho ô mô tả** */}
+                <TextInput style={styles.textArea} placeholder="Mô tả về vị trí, tiện ích, nội thất..." value={form.description} onChangeText={(e) => setForm({ ...form, description: e })} multiline numberOfLines={4} />
                 
                 <Text style={styles.label}>Tỉnh / Thành phố</Text>
                 <TouchableOpacity style={styles.input} onPress={() => setIsPickerVisible(true)}>
@@ -201,7 +215,7 @@ const CreateProperty = () => {
                 <Text style={styles.label}>Loại hình</Text>
                 <View style={styles.typeContainer}>
                     {PROPERTY_TYPES.map(type => (
-                        <TouchableOpacity key={type} onPress={() => setForm({...form, type: type})} style={[styles.typeButton, form.type === type && styles.typeButtonSelected]}>
+                        <TouchableOpacity key={type} onPress={() => setForm({ ...form, type: type })} style={[styles.typeButton, form.type === type && styles.typeButtonSelected]}>
                             <Text style={[styles.typeText, form.type === type && styles.typeTextSelected]}>{type}</Text>
                         </TouchableOpacity>
                     ))}
@@ -233,40 +247,35 @@ const CreateProperty = () => {
                 </View>
 
                 <View style={{ marginTop: 20 }}>
-                    <Button title={isSubmitting ? "Đang xử lý..." : "Gửi đi"} onPress={handleSubmit} disabled={isSubmitting} />
+                    <Button title={isSubmitting ? "Đang xử lý..." : (isEditing ? "Cập nhật" : "Gửi đi")} onPress={handleSubmit} disabled={isSubmitting} />
                 </View>
             </ScrollView>
 
-            <Modal
-                visible={isPickerVisible}
-                animationType="slide"
-                transparent={true}
-                onRequestClose={() => setIsPickerVisible(false)}
-            >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalContent}>
-                        <FlatList
-                            data={Object.entries(REGIONS)}
-                            keyExtractor={(item) => item[0]}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity style={styles.modalItem} onPress={() => onRegionSelect(item[0] as RegionKey)}>
-                                    <Text style={styles.modalItemText}>{item[1]}</Text>
-                                </TouchableOpacity>
-                            )}
-                        />
-                        <Button title="Đóng" onPress={() => setIsPickerVisible(false)} />
-                    </View>
-                </View>
+            <Modal visible={isPickerVisible} animationType="slide" transparent={true} onRequestClose={() => setIsPickerVisible(false)}>
+                <View style={styles.modalContainer}><View style={styles.modalContent}><FlatList data={Object.entries(REGIONS)} keyExtractor={(item) => item[0]} renderItem={({ item }) => (<TouchableOpacity style={styles.modalItem} onPress={() => onRegionSelect(item[0] as RegionKey)}><Text style={styles.modalItemText}>{item[1]}</Text></TouchableOpacity>)} /><Button title="Đóng" onPress={() => setIsPickerVisible(false)} /></View></View>
             </Modal>
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, padding: 20 },
-    title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
+    container: { flex: 1, paddingHorizontal: 20 },
+    header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingTop: 10 },
+    backButton: { padding: 8 },
+    title: { fontSize: 24, fontWeight: 'bold', marginLeft: 10 },
     label: { fontSize: 16, fontWeight: '500', marginBottom: 5, color: '#333' },
     input: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5, marginBottom: 15, fontSize: 16, height: 48, justifyContent: 'center' },
+    // **FIX: Style mới cho ô mô tả**
+    textArea: {
+        borderWidth: 1,
+        borderColor: '#ccc',
+        padding: 10,
+        borderRadius: 5,
+        marginBottom: 15,
+        fontSize: 16,
+        height: 120, // Chiều cao lớn hơn
+        textAlignVertical: 'top' // Căn chữ bắt đầu từ trên xuống
+    },
     inputText: { fontSize: 16 },
     pickerButton: { backgroundColor: '#f0f0f0', padding: 15, borderRadius: 5, alignItems: 'center', marginBottom: 15 },
     pickerText: { fontSize: 16 },
@@ -277,27 +286,10 @@ const styles = StyleSheet.create({
     typeButtonSelected: { backgroundColor: '#007BFF', borderColor: '#007BFF' },
     typeText: { color: '#333' },
     typeTextSelected: { color: '#fff', fontWeight: 'bold' },
-    modalContainer: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.5)'
-    },
-    modalContent: {
-        backgroundColor: 'white',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        padding: 20,
-        maxHeight: '70%',
-    },
-    modalItem: {
-        paddingVertical: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee'
-    },
-    modalItemText: {
-        fontSize: 18,
-        textAlign: 'center'
-    }
+    modalContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    modalContent: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '70%' },
+    modalItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
+    modalItemText: { fontSize: 18, textAlign: 'center' }
 });
 
 export default CreateProperty;
