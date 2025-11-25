@@ -56,75 +56,75 @@ export const featuredCards = [
 ];
 
 export const categories = [
-  { title: "All", category: "All" },
-  { title: "Houses", category: "House" },
-  { title: "Condos", category: "Condos" },
-  { title: "Duplexes", category: "Duplexes" },
-  { title: "Studios", category: "Studios" },
-  { title: "Villas", category: "Villa" },
-  { title: "Apartments", category: "Apartments" },
-  { title: "Townhomes", category: "Townhomes" },
-  { title: "Others", category: "Others" },
+  { title: "Tất cả", category: "All" },
+  { title: "Nhà", category: "House" },
+  { title: "Căn hộ chung cư", category: "Condos" },
+  { title: "Nhà song lập", category: "Duplexes" },
+  { title: "Căn hộ studio", category: "Studios" },
+  { title: "Biệt thự", category: "Villa" },
+  { title: "Căn hộ", category: "Apartments" },
+  { title: "Nhà liền kề", category: "Townhomes" },
+  { title: "Khác", category: "Others" },
 ];
 
 export const settings = [
   {
-    title: "My Bookings",
+    title: "Lịch hẹn của tôi",
     icon: icons.calendar,
   },
   {
-    title: "Payments",
+    title: "Thanh toán",
     icon: icons.wallet,
   },
   {
-    title: "Profile",
+    title: "Hồ sơ",
     icon: icons.person,
   },
   {
-    title: "Notifications",
+    title: "Thông báo",
     icon: icons.bell,
   },
   {
-    title: "Security",
+    title: "Bảo mật",
     icon: icons.shield,
   },
   {
-    title: "Language",
+    title: "Ngôn ngữ",
     icon: icons.language,
   },
   {
-    title: "Help Center",
+    title: "Trung tâm trợ giúp",
     icon: icons.info,
   },
   {
-    title: "Invite Friends",
+    title: "Mời bạn bè",
     icon: icons.people,
   },
 ];
 
 export const facilities = [
   {
-    title: "Laundry",
+    title: "Giặt ủi",
     icon: icons.laundry,
   },
   {
-    title: "Car Parking",
+    title: "Đỗ xe ô tô",
     icon: icons.carPark,
   },
   {
-    title: "Sports Center",
+    title: "Trung tâm thể thao",
     icon: icons.run,
   },
   {
-    title: "Cutlery",
+    title: "Dụng cụ ăn uống",
     icon: icons.cutlery,
   },
   {
-    title: "Gym",
+    title: "Phòng gym",
     icon: icons.dumbell,
   },
   {
-    title: "Swimming pool",
+    title: "Bể bơi",
     icon: icons.swim,
   },
   {
@@ -132,7 +132,7 @@ export const facilities = [
     icon: icons.wifi,
   },
   {
-    title: "Pet Center",
+    title: "Chăm sóc thú cưng",
     icon: icons.dog,
   },
 ];

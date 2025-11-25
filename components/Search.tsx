@@ -25,7 +25,7 @@ const Search = () => {
                 <TextInput
                     value={search}
                     onChangeText={handleSearch}
-                    placeholder={"Search House"}
+                    placeholder={"Tìm kiếm nhà"}
                     placeholderTextColor="#888"
                     className={"text-sm font-rubik text-black-300 ml-2 flex-1"}
                 />

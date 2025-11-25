@@ -12,6 +12,7 @@ interface UseAppwriteReturn<T, P> {
     loading: boolean;
     error: string | null;
     refetch: (newParams: P) => Promise<void>;
+    setData: React.Dispatch<React.SetStateAction<T | null>>;
 }
 
 export const useAppwrite = <T, P extends Record<string, string | number>>({
@@ -51,5 +52,5 @@ export const useAppwrite = <T, P extends Record<string, string | number>>({
 
     const refetch = async (newParams: P) => await fetchData(newParams);
 
-    return { data, loading, error, refetch };
+    return { data, loading, error, refetch, setData };
 };
