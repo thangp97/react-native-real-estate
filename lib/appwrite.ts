@@ -7,7 +7,10 @@ export const config = {
     databaseId: process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID,
     storageId: process.env.EXPO_PUBLIC_APPWRITE_STORAGE_ID,
     profilesCollectionId: 'profiles',
+    agentsCollectionId: 'agents', // Thêm collection Agents
     propertiesCollectionId: 'properties',
+    bookingsCollectionId: 'bookings',
+    notificationsCollectionId: 'notifications',
 }
 
 const client = new Client();
@@ -193,14 +196,19 @@ export async function getPropertyById({ id }) {
 
         if (!property) return null;
 
-        if (property.sellerId) {
-            const sellerProfile = await databases.getDocument(
-                config.databaseId!,
-                config.profilesCollectionId!,
-                property.sellerId
-            );
-            // Gán thông tin người bán vào một trường mới, ví dụ `agent`
-            property.agent = sellerProfile;
+        // Nếu có brokerId, lấy thông tin môi giới
+        if (property.brokerId) {
+            try {
+                const brokerProfile = await databases.getDocument(
+                    config.databaseId!,
+                    config.agentsCollectionId!, // Sửa thành agentsCollectionId
+                    property.brokerId
+                );
+                property.agent = brokerProfile;
+            } catch (err) {
+                console.warn(`Warning: Không tìm thấy thông tin môi giới với ID ${property.brokerId} trong collection Agents. Dùng thông tin mặc định.`);
+                // Không làm gì, property.agent sẽ là undefined -> UI tự fallback
+            }
         }
 
         return property;
@@ -228,7 +236,9 @@ export async function uploadFile(file: any) {
             asset
         );
 
-        const fileUrl = storage.getFilePreview(config.storageId!, uploadedFile.$id, 2000, 2000, 'top', 100);
+        // Tự tạo URL view để đảm bảo trả về string chuẩn
+        const fileUrl = `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
+
         return fileUrl;
     } catch (error) {
         console.error('Lỗi tải file:', error);
@@ -248,6 +258,110 @@ export async function updateUserProfile(userId: string, data: object) {
     } catch (error) {
         console.error('Lỗi cập nhật hồ sơ:', error);
         throw error;
+    }
+}
+
+export async function togglePropertyFavorite(userId: string, propertyId: string, currentFavorites: string[] = []) {
+    try {
+        // Đảm bảo currentFavorites luôn là mảng
+        let safeFavorites = Array.isArray(currentFavorites) ? [...currentFavorites] : [];
+
+        const index = safeFavorites.indexOf(propertyId);
+
+        if (index !== -1) {
+            safeFavorites.splice(index, 1);
+        } else {
+            safeFavorites.push(propertyId);
+        }
+
+        console.log(`Updating favorites for user ${userId}:`, safeFavorites);
+
+        await updateUserProfile(userId, { favorites: safeFavorites });
+        return safeFavorites;
+    } catch (error) {
+        console.error("Lỗi khi toggle favorite:", JSON.stringify(error, null, 2));
+        throw error;
+    }
+}
+
+export async function getSavedProperties(favoriteIds: string[]) {
+    if (!favoriteIds || favoriteIds.length === 0) return [];
+    try {
+        // Appwrite hỗ trợ query theo mảng ID bằng Query.equal('$id', [array])
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [Query.equal('$id', favoriteIds)]
+        );
+        return result.documents;
+    } catch (error) {
+        console.error("Lỗi lấy danh sách đã lưu:", error);
+        return [];
+    }
+}
+
+export async function createBooking({ userId, agentId, propertyId, date, note }) {
+    try {
+        const booking = await databases.createDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            ID.unique(),
+            {
+                userId,
+                agentId,
+                propertyId,
+                date,
+                note,
+                status: 'pending'
+            }
+        );
+        return booking;
+    } catch (error) {
+        console.error("Lỗi tạo lịch hẹn:", error);
+        throw error;
+    }
+}
+
+export async function getUserBookings(userId) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            [Query.equal('userId', userId), Query.orderDesc('date')]
+        );
+
+        // Lấy thêm thông tin chi tiết BĐS cho mỗi booking
+        const bookingsWithDetails = await Promise.all(result.documents.map(async (booking) => {
+            try {
+                const property = await databases.getDocument(
+                    config.databaseId!,
+                    config.propertiesCollectionId!,
+                    booking.propertyId
+                );
+                return { ...booking, property };
+            } catch (err) {
+                return booking; // Nếu lỗi lấy property, trả về booking gốc
+            }
+        }));
+
+        return bookingsWithDetails;
+    } catch (error) {
+        console.error("Lỗi lấy danh sách lịch hẹn:", error);
+        return [];
+    }
+}
+
+export async function getUserNotifications(userId) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.notificationsCollectionId!,
+            [Query.equal('userId', userId), Query.orderDesc('$createdAt')]
+        );
+        return result.documents;
+    } catch (error) {
+        console.error("Lỗi lấy thông báo:", error);
+        return [];
     }
 }
 

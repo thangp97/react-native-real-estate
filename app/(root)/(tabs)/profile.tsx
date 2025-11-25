@@ -6,6 +6,7 @@ import icons from "@/constants/icons";
 import {useGlobalContext} from "@/lib/global-provider";
 import {signOut as logout, updateUserProfile, uploadFile} from "@/lib/appwrite";
 import {settings} from "@/constants/data";
+import { useRouter } from 'expo-router';
 
 interface SettingItemProps {
     icon: ImageSourcePropType;
@@ -28,8 +29,9 @@ const SettingsItem = ({icon, title, onPress, textStyle, showArrow = true}:
 )
 
 const Profile = () => {
-    const {user, refetch} = useGlobalContext();
+    const {user, refetch, setUser} = useGlobalContext();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const router = useRouter();
 
     const handleLogout = async () => {
         await logout();
@@ -45,22 +47,31 @@ const Profile = () => {
             return;
         }
 
-        let result = await ImagePicker.launchImageLibraryAsync({
+        let pickerResult = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsMultipleSelection: false,
             quality: 1,
         });
 
-        if (!result.canceled && result.assets && result.assets.length > 0) {
+        if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
             setIsSubmitting(true);
             try {
-                const fileUrl = await uploadFile(result.assets[0]);
-                if (!fileUrl) throw new Error("Không thể tải ảnh lên.");
+                const uploadResult = await uploadFile(pickerResult.assets[0]);
+                if (!uploadResult) throw new Error("Không thể tải ảnh lên.");
 
-                await updateUserProfile(user!.$id, { avatar: fileUrl.href });
+                const avatarUrl = typeof uploadResult === 'object' && 'href' in uploadResult ? uploadResult.href : uploadResult;
+
+                console.log("Avatar URL to update:", avatarUrl);
+
+                if (!avatarUrl) throw new Error("URL ảnh không hợp lệ.");
+
+                await updateUserProfile(user!.$id, { avatar: avatarUrl });
+
+                if (setUser) {
+                    setUser({ ...user!, avatar: avatarUrl });
+                }
 
                 Alert.alert("Thành công", "Ảnh đại diện đã được cập nhật.");
-                await refetch(); // Tải lại dữ liệu người dùng để cập nhật UI
 
             } catch (error: any) {
                 console.error("Lỗi cập nhật ảnh đại diện:", error);
@@ -80,7 +91,9 @@ const Profile = () => {
             >
                 <View className={"flex flex-row items-center justify-between mt-5"}>
                     <Text className={"text-xl font-rubik-bold"}>Hồ sơ</Text>
-                    <Image source={icons.bell} className={"size-5"} />
+                    <TouchableOpacity onPress={() => router.push('/notifications')}>
+                        <Image source={icons.bell} className={"size-5"} />
+                    </TouchableOpacity>
                 </View>
 
                 <View className={"flex-row justify-center flex mt-5"}>
@@ -95,7 +108,10 @@ const Profile = () => {
                 </View>
 
                 <View className={"flex flex-col mt-10"}>
-                    <SettingsItem icon={icons.calendar} title={"Lịch hẹn của tôi"}
+                    <SettingsItem 
+                        icon={icons.calendar} 
+                        title={"Lịch hẹn của tôi"} 
+                        onPress={() => router.push('/bookings')}
                     />
                     <SettingsItem icon={icons.wallet} title={"Thanh toán"}
                     />

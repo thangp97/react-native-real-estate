@@ -15,6 +15,7 @@ interface GlobalContextType {
     user: User | null;
     loading: boolean;
     refetch: (newParams?: Record<string, string | number>) => Promise<void>;
+    setUser: (user: User | null) => void;
 }
 
 const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
@@ -23,7 +24,8 @@ export const GlobalProvider = ({children}: {children: ReactNode}) => {
     const {
         data: user,
         loading,
-        refetch
+        refetch,
+        setData
     } = useAppwrite({
         fn: getCurrentUser,
     })
@@ -37,6 +39,7 @@ export const GlobalProvider = ({children}: {children: ReactNode}) => {
             user,
             loading,
             refetch,
+            setUser: setData as any
         }}>
             {children}
         </GlobalContext.Provider>
