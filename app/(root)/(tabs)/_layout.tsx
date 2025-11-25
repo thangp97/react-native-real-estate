@@ -27,6 +27,7 @@ const TabsLayout = () => {
         return (
             <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
                 <Tabs.Screen name="explore" options={{ title: 'Khám Phá', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="search" size={24} color={color} /> }} />
+                <Tabs.Screen name="saved" options={{ title: 'Đã lưu', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="heart" size={24} color={color} /> }} />
                 <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
 
                 {/* Ẩn các tab không liên quan */}
@@ -48,6 +49,7 @@ const TabsLayout = () => {
                 <Tabs.Screen name="index" options={{ href: null }} />
                 <Tabs.Screen name="explore" options={{ href: null }} />
                 <Tabs.Screen name="dashboard" options={{ href: null }} />
+                <Tabs.Screen name="saved" options={{ href: null }} />
             </Tabs>
         );
     }
@@ -63,6 +65,7 @@ const TabsLayout = () => {
                 <Tabs.Screen name="index" options={{ href: null }} />
                 <Tabs.Screen name="explore" options={{ href: null }} />
                 <Tabs.Screen name="my-properties" options={{ href: null }} />
+                <Tabs.Screen name="saved" options={{ href: null }} />
             </Tabs>
         );
     }
