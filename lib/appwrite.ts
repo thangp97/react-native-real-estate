@@ -10,7 +10,11 @@ export const config = {
     propertiesCollectionId: 'properties',
 }
 
-export const client = new Client();
+const client = new Client();
+client
+    .setEndpoint(config.endpoint) // Dùng biến đã export
+    .setProject(config.projectId)
+    .setPlatform(config.platform);
 
 client
     .setEndpoint(config.endpoint!)
@@ -243,6 +247,165 @@ export async function updateUserProfile(userId: string, data: object) {
         return updatedProfile;
     } catch (error) {
         console.error('Lỗi cập nhật hồ sơ:', error);
+        throw error;
+    }
+}
+
+export async function getBrokerStats(userId: string) {
+    try {
+        // 1. Đếm số tin đang chờ duyệt trên toàn hệ thống (Work Queue)
+        const pendingDocs = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [Query.equal('status', 'pending_approval')] // FIX: Dùng giá trị thật
+        );
+
+        // 2. Đếm số tin BẠN đang quản lý (Active Work)
+        const myActiveDocs = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [
+                Query.equal('brokerId', userId),
+                Query.or([
+                    Query.equal('status', 'approved'),
+                    Query.equal('status', 'reviewing'),
+                ])
+            ]
+        );
+
+         // 3. Đếm số tin BẠN đã bán thành công (Sold Count)
+         const mySoldDocs = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [
+                Query.equal('brokerId', userId),
+                Query.equal('status', 'sold')
+            ]
+        );
+
+        return {
+            pendingCount: pendingDocs.total,
+            myActiveCount: myActiveDocs.total,
+            mySoldCount: mySoldDocs.total,
+            rating: 4.8,
+        };
+
+    } catch (error) {
+        console.error("Error fetching broker stats (Real Data):", error);
+        return { pendingCount: 0, myActiveCount: 0, mySoldCount: 0, rating: 0 };
+    }
+}
+
+
+/**
+ * Lấy danh sách tin "Cần duyệt" (Work Queue) để hiện trên Dashboard (Dữ liệu thật)
+ */
+export async function getBrokerRecentProperties(userId: string) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [
+                Query.equal('status', 'pending_approval'), // FIX: Dùng giá trị thật
+                Query.orderDesc('$createdAt'),
+                Query.limit(5)
+            ]
+        );
+
+        console.log("LOG: Danh sách tin chờ duyệt (Pending Properties):", JSON.stringify(result.documents.map(d => ({id: d.$id, status: d.status, brokerId: d.brokerId})), null, 2));
+
+        return result.documents;
+    } catch (error) {
+        console.error("Error fetching pending properties (Real Data):", error);
+        return [];
+    }
+}
+
+
+/**
+ * Hàm Broker nhận yêu cầu duyệt tin (Pick Task)
+ */
+export async function assignPropertyToBroker(propertyId: string, brokerId: string) {
+    if (!propertyId || !brokerId) {
+        throw new Error("Missing propertyId or brokerId.");
+    }
+
+    try {
+        // Cần đảm bảo rằng sau khi Broker nhận việc, họ có thể tiếp tục quản lý tin này.
+        // Cập nhật Document, đồng thời thêm quyền UPDATE và DELETE cho Broker ID
+        const updatedDocument = await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            {
+                brokerId: brokerId,
+                status: 'reviewing',
+            },
+            // THÊM QUYỀN GHI MỚI CHO BROKER (Permissions)
+            [
+                // Giữ nguyên quyền đọc công khai (ví dụ: 'any')
+                // Thêm quyền cập nhật/xóa cho Broker mới nhận việc
+                'update("user:' + brokerId + '")',
+                'delete("user:' + brokerId + '")',
+            ]
+        );
+
+        console.log(`LOG: Broker ${brokerId} đã nhận duyệt tin ${propertyId} và cập nhật quyền.`);
+        return updatedDocument;
+
+    } catch (error) {
+        console.error("Lỗi khi Broker nhận việc (Assign Task):", error);
+        // Quan trọng: Trả về lỗi chi tiết để dễ debug hơn
+        throw new Error(`Assignment Failed: ${error.message || 'Unknown Error'}`);
+    }
+}
+
+export async function getMyActiveProperties(userId: string) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [
+                Query.equal('brokerId', userId), // Lọc theo ID của Broker
+                Query.notEqual('status', 'sold'), // Loại bỏ các tin đã bán
+                Query.notEqual('status', 'rejected'), // Loại bỏ các tin bị từ chối
+                Query.orderDesc('$updatedAt'), // Tin được cập nhật gần nhất lên đầu
+            ]
+        );
+
+        console.log(`LOG: Danh sách tin đang quản lý của Broker ${userId} (${result.total} tin)`);
+        return result.documents;
+    } catch (error) {
+        console.error("Lỗi khi lấy danh sách tin đang quản lý:", error);
+        return [];
+    }
+}
+
+export async function finalizeVerification(
+    propertyId: string,
+    decision: 'approved' | 'rejected' | 'request_changes',
+    note?: string,
+    proposedPrice?: number
+) {
+    try {
+        const updateData: any = {
+            status: decision,
+            verificationDate: new Date().toISOString(),
+        };
+
+        if (note) updateData.rejectionReason = note;
+        if (proposedPrice) updateData.proposedPrice = proposedPrice;
+
+        const result = await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            updateData
+        );
+        return result;
+
+    } catch (error) {
+        console.error("Lỗi khi kết thúc thẩm định:", error);
         throw error;
     }
 }

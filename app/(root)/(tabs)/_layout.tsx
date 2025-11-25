@@ -54,18 +54,32 @@ const TabsLayout = () => {
 
     // Môi giới
     if (user.role === 'broker') {
-        return (
-            <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
-                <Tabs.Screen name="dashboard" options={{ title: 'Dashboard', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="briefcase" size={24} color={color} /> }} />
-                <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
+            return (
+                <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
+                    {/* 1. Dashboard: Tổng quan số liệu và Tin chờ duyệt */}
+                    <Tabs.Screen name="dashboard" options={{ title: 'Tổng quan', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="stats-chart" size={24} color={color} /> }} />
 
-                {/* Ẩn các tab không liên quan */}
-                <Tabs.Screen name="index" options={{ href: null }} />
-                <Tabs.Screen name="explore" options={{ href: null }} />
-                <Tabs.Screen name="my-properties" options={{ href: null }} />
-            </Tabs>
-        );
-    }
+                    {/* 2. My Listings: Danh sách tin đã nhận duyệt và đang quản lý */}
+                    <Tabs.Screen
+                        name="my-listings" // Cần tạo file app/(root)/(tabs)/my-listings.tsx
+                        options={{
+                            title: 'Tin của tôi',
+                            headerShown: false,
+                            tabBarIcon: ({ color }) => <Ionicons name="business" size={24} color={color} />
+                        }}
+                    />
+
+                    {/* 3. Hồ Sơ */}
+                    <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
+
+                    {/* Ẩn các tab không liên quan */}
+                    <Tabs.Screen name="index" options={{ href: null }} />
+                    <Tabs.Screen name="explore" options={{ href: null }} />
+                    <Tabs.Screen name="my-properties" options={{ href: null }} />
+                </Tabs>
+            );
+        }r
+
 
     // Fallback phòng trường hợp role không xác định
     return <Text>Không thể xác định vai trò người dùng.</Text>;
