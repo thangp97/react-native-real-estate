@@ -1,8 +1,8 @@
 // File: app/(root)/(tabs)/_layout.tsx
 
-import { Tabs, Redirect } from 'expo-router';
 import { useGlobalContext } from '@/lib/global-provider';
-import { ActivityIndicator, View, Text } from 'react-native';
+import { Redirect, Tabs } from 'expo-router';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 // Bạn có thể cài đặt và sử dụng thư viện icon này: npm install @expo/vector-icons
 import { Ionicons } from '@expo/vector-icons';
@@ -34,6 +34,8 @@ const TabsLayout = () => {
                 <Tabs.Screen name="index" options={{ href: null }} />
                 <Tabs.Screen name="my-properties" options={{ href: null }} />
                 <Tabs.Screen name="dashboard" options={{ href: null }} />
+                <Tabs.Screen name="my-listings" options={{href: null}}/>
+                <Tabs.Screen name="review-property/[id]"  options={{href: null}}/>
             </Tabs>
         );
     }
@@ -79,17 +81,11 @@ const TabsLayout = () => {
                 <Tabs.Screen name="explore" options={{ href: null }} />
                 <Tabs.Screen name="my-properties" options={{ href: null }} />
                 <Tabs.Screen name="saved" options={{ href: null }} />
+                
             </Tabs>
         );
     }
-                    {/* Ẩn các tab không liên quan */}
-                    <Tabs.Screen name="index" options={{ href: null }} />
-                    <Tabs.Screen name="explore" options={{ href: null }} />
-                    <Tabs.Screen name="my-properties" options={{ href: null }} />
-                </Tabs>
-            );
-        }r
-
+    
 
     // Fallback phòng trường hợp role không xác định
     return <Text>Không thể xác định vai trò người dùng.</Text>;
