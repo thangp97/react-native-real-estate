@@ -128,7 +128,7 @@ export async function getUserProperties({ userId }) {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
-            [Query.equal('sellerId', userId), Query.orderDesc('$createdAt')]
+            [Query.equal('seller', userId), Query.orderDesc('$createdAt')]
         );
         return result.documents;
     } catch (e) {
@@ -142,7 +142,7 @@ export async function getLastestProperties() {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
-            [Query.or([Query.equal('status', 'available'), Query.equal('status', 'sold')]), Query.orderDesc("$createdAt"), Query.limit(5)]
+            [Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved'), Query.equal('status', 'sold')]), Query.orderDesc("$createdAt"), Query.limit(5)]
         );
         return result.documents;
     } catch (e) {
@@ -151,12 +151,14 @@ export async function getLastestProperties() {
     }
 }
 
-export async function getProperties({filter, query, limit}) {
+export async function getProperties({filter, query, limit, minPrice, maxPrice, bedrooms, area}) {
     try {
-        const buildQuery = [Query.or([Query.equal('status', 'available'), Query.equal('status', 'sold')]), Query.orderDesc('$createdAt')];
+        const buildQuery = [Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved'), Query.equal('status', 'sold')]), Query.orderDesc('$createdAt')];
+        
         if (filter && filter !== 'All') {
             buildQuery.push(Query.equal('type', filter));
         }
+        
         if (query) {
             buildQuery.push(Query.or([
                 Query.search('name', query),
@@ -164,7 +166,14 @@ export async function getProperties({filter, query, limit}) {
                 Query.search('type', query),
             ]));
         }
+
+        if (minPrice) buildQuery.push(Query.greaterThanEqual('price', Number(minPrice)));
+        if (maxPrice) buildQuery.push(Query.lessThanEqual('price', Number(maxPrice)));
+        if (bedrooms) buildQuery.push(Query.greaterThanEqual('bedrooms', Number(bedrooms)));
+        if (area) buildQuery.push(Query.greaterThanEqual('area', Number(area)));
+
         if (limit) buildQuery.push(Query.limit(limit));
+        
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
@@ -173,6 +182,28 @@ export async function getProperties({filter, query, limit}) {
         return result.documents;
     } catch (e) {
         console.error(e);
+        return [];
+    }
+}
+
+export async function getSimilarProperties({ propertyId, type }) {
+    try {
+        const buildQuery = [
+            Query.equal('type', type),
+            Query.notEqual('$id', propertyId),
+            Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved')]),
+            Query.limit(5),
+            Query.orderDesc('$createdAt')
+        ];
+
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            buildQuery
+        );
+        return result.documents;
+    } catch (error) {
+        console.error("Lỗi lấy BĐS tương tự:", error);
         return [];
     }
 }
@@ -187,24 +218,20 @@ export async function getPropertyById({ id }) {
         const property = await databases.getDocument(
             config.databaseId!,
             config.propertiesCollectionId!,
-            id
+            id,
+            [Query.select(['*', 'seller.name', 'seller.email', 'seller.avatar'])] // Yêu cầu trả về các trường của seller
         );
 
         if (!property) return null;
-
-        // Nếu có brokerId, lấy thông tin môi giới
-        if (property.brokerId) {
-            try {
-                const brokerProfile = await databases.getDocument(
-                    config.databaseId!,
-                    config.agentsCollectionId!, // Sửa thành agentsCollectionId
-                    property.brokerId
-                );
-                property.agent = brokerProfile;
-            } catch (err) {
-                console.warn(`Warning: Không tìm thấy thông tin môi giới với ID ${property.brokerId} trong collection Agents. Dùng thông tin mặc định.`);
-                // Không làm gì, property.agent sẽ là undefined -> UI tự fallback
-            }
+        
+        // Gán thông tin seller vào property.agent để frontend không cần thay đổi nhiều
+        if (property.seller) {
+            property.agent = {
+                name: property.seller.name,
+                email: property.seller.email,
+                avatar: property.seller.avatar,
+                // Thêm các trường khác của seller nếu cần thiết cho frontend
+            };
         }
 
         return property;
@@ -303,9 +330,9 @@ export async function createBooking({ userId, agentId, propertyId, date, note })
             config.bookingsCollectionId!,
             ID.unique(),
             {
-                userId,
-                agentId,
-                propertyId,
+                user: userId,
+                agent: agentId,
+                property: propertyId,
                 date,
                 note,
                 status: 'pending'
@@ -318,41 +345,72 @@ export async function createBooking({ userId, agentId, propertyId, date, note })
     }
 }
 
+export async function cancelBooking(bookingId: string) {
+    try {
+        const result = await databases.updateDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            bookingId,
+            {
+                status: 'cancelled'
+            }
+        );
+        return result;
+    } catch (error) {
+        console.error("Lỗi hủy lịch hẹn:", error);
+        throw error;
+    }
+}
+
 export async function getUserBookings(userId) {
     try {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.bookingsCollectionId!,
-            [Query.equal('userId', userId), Query.orderDesc('date')]
+            [Query.equal('user', userId), Query.orderDesc('date')]
         );
-        
-        // Lấy thêm thông tin chi tiết BĐS cho mỗi booking
-        const bookingsWithDetails = await Promise.all(result.documents.map(async (booking) => {
+
+        // Manually fetch property details for each booking to ensure data availability
+        const enrichedBookings = await Promise.all(result.documents.map(async (booking) => {
             try {
-                const property = await databases.getDocument(
-                    config.databaseId!,
-                    config.propertiesCollectionId!,
-                    booking.propertyId
-                );
-                return { ...booking, property };
+                // Case 1: property is a string ID
+                if (booking.property && typeof booking.property === 'string') {
+                    const propertyData = await getPropertyById({ id: booking.property });
+                    if (propertyData) {
+                        booking.property = propertyData;
+                    }
+                } 
+                // Case 2: property is an object but might be incomplete (e.g., missing name)
+                else if (booking.property && typeof booking.property === 'object') {
+                    // If name is missing, likely just a relationship wrapper or partial data
+                    if (!booking.property.name && booking.property.$id) {
+                        const propertyData = await getPropertyById({ id: booking.property.$id });
+                        if (propertyData) {
+                            booking.property = propertyData;
+                        }
+                    }
+                }
+                // Case 3: property is missing (null/undefined) - Data integrity issue
+                // We can't do much if we don't have an ID.
             } catch (err) {
-                return booking; // Nếu lỗi lấy property, trả về booking gốc
+                console.error(`Failed to enrich booking ${booking.$id}:`, err);
             }
+
+            return booking;
         }));
 
-        return bookingsWithDetails;
+        return enrichedBookings;
     } catch (error) {
         console.error("Lỗi lấy danh sách lịch hẹn:", error);
         return [];
     }
 }
-
 export async function getUserNotifications(userId) {
     try {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.notificationsCollectionId!,
-            [Query.equal('userId', userId), Query.orderDesc('$createdAt')]
+            [Query.equal('user', userId), Query.orderDesc('$createdAt')]
         );
         return result.documents;
     } catch (error) {

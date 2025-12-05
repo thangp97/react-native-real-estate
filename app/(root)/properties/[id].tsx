@@ -23,19 +23,22 @@ import icons from "@/constants/icons";
 import images from "@/constants/images";
 import Comment from "@/components/Comment";
 import { facilities } from "@/constants/data";
+import { Card } from "@/components/Cards";
 
 import { useAppwrite } from "@/lib/useAppwrite";
-import { getPropertyById, togglePropertyFavorite, createBooking } from "@/lib/appwrite";
+import { getPropertyById, togglePropertyFavorite, createBooking, getSimilarProperties } from "@/lib/appwrite";
 import { useGlobalContext } from "@/lib/global-provider";
 import { useState, useEffect } from "react";
 
-type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';
-
+type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'approved' | 'available';
+// ... (keep existing helper functions: formatStatus, getStatusColor) ...
 // Hàm helper để định dạng trạng thái và màu sắc
 const formatStatus = (status: PropertyStatus) => {
     const statuses: Record<PropertyStatus, string> = {
         'pending_approval': 'Chờ duyệt',
         'for_sale': 'Đang bán',
+        'available': 'Đang bán',
+        'approved': 'Đang bán',
         'deposit_paid': 'Đã cọc',
         'sold': 'Đã bán',
         'rejected': 'Bị từ chối',
@@ -48,17 +51,19 @@ const getStatusColor = (status: PropertyStatus) => {
     const colors: Record<PropertyStatus, string> = {
         'pending_approval': '#f0ad4e', // Vàng
         'for_sale': '#5cb85c',       // Xanh lá
-        'deposit_paid': '#337ab7',       // Xanh dương
-        'sold': '#d9534f',       // Đỏ
+        'available': '#5cb85c',      // Xanh lá
+        'approved': '#5cb85c',       // Xanh lá
+        'deposit_paid': '#337ab7',   // Xanh dương
+        'sold': '#d9534f',           // Đỏ
         'rejected': '#777',          // Xám
-        'expired': '#777'           // Xám
+        'expired': '#777'            // Xám
     };
     return colors[status] || '#777';
 };
 
 const Property = () => {
     const { id } = useLocalSearchParams<{ id?: string }>();
-    const { user, refetch: refetchUser, setUser } = useGlobalContext(); // Lấy thêm hàm setUser
+    const { user, refetch: refetchUser, setUser } = useGlobalContext();
 
     const windowHeight = Dimensions.get("window").height;
 
@@ -68,6 +73,8 @@ const Property = () => {
             id: id!,
         },
     });
+
+    const [similarProperties, setSimilarProperties] = useState<any[]>([]);
 
     // State cho favorites
     const [isFavorite, setIsFavorite] = useState(false);
@@ -79,11 +86,23 @@ const Property = () => {
     const [isBooking, setIsBooking] = useState(false);
 
     useEffect(() => {
-        // Kiểm tra xem user có danh sách favorites không và property hiện tại có trong đó không
         if (user?.favorites && Array.isArray(user.favorites) && id) {
             setIsFavorite(user.favorites.includes(id));
         }
     }, [user, id]);
+
+    useEffect(() => {
+        const fetchSimilar = async () => {
+            if (property?.type && id) {
+                const similar = await getSimilarProperties({ 
+                    propertyId: id, 
+                    type: property.type 
+                });
+                setSimilarProperties(similar);
+            }
+        };
+        fetchSimilar();
+    }, [property, id]);
 
     const handleToggleFavorite = async () => {
         if (!user) {
@@ -97,11 +116,9 @@ const Property = () => {
             const currentFavorites = user.favorites || [];
             const newFavorites = await togglePropertyFavorite(user.$id, id, currentFavorites);
             
-            // Update local state
             const isNowFavorite = newFavorites.includes(id);
             setIsFavorite(isNowFavorite);
             
-            // Cập nhật Global User State ngay lập tức (Optimistic Update)
             if (setUser) {
                 setUser({
                     ...user,
@@ -109,7 +126,6 @@ const Property = () => {
                 });
             }
             
-            // Hiển thị thông báo thành công
             Alert.alert(
                 "Thành công",
                 isNowFavorite ? "Đã thêm vào mục yêu thích!" : "Đã xóa khỏi mục yêu thích."
@@ -117,14 +133,12 @@ const Property = () => {
             
         } catch (error) {
             Alert.alert("Lỗi", "Không thể lưu tin. Vui lòng thử lại.");
-            // Revert state nếu lỗi
             setIsFavorite(isFavorite); 
         } finally {
             setToggling(false);
         }
     };
 
-    // Thông tin liên hệ của Sàn / Môi giới (Fallback)
     const DEFAULT_BROKER_ID = "66a010d1000b213b2e59"; 
 
     const PLATFORM_DEFAULT_BROKER = {
@@ -134,7 +148,6 @@ const Property = () => {
         avatar: images.avatar
     };
 
-    // Xác định môi giới hiện tại: ưu tiên từ property.agent, nếu không thì dùng mặc định sàn
     const currentBroker = property?.agent ? {
         name: property.agent.name,
         phone: property.agent.phone || PLATFORM_DEFAULT_BROKER.phone,
@@ -145,10 +158,7 @@ const Property = () => {
     const handleOpenMap = () => {
         const address = property?.address;
         if (!address) return;
-
-        // Luôn sử dụng Google Maps URL
         const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-
         Linking.openURL(url).catch(err => console.error('Không thể mở Google Maps:', err));
     };
 
@@ -177,7 +187,7 @@ const Property = () => {
         try {
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
-            tomorrow.setHours(9, 0, 0, 0); // 9 giờ sáng
+            tomorrow.setHours(9, 0, 0, 0);
 
             await createBooking({
                 userId: user.$id,
@@ -234,7 +244,7 @@ const Property = () => {
                                     <Image
                                         source={icons.heart}
                                         className="size-7"
-                                        tintColor={isFavorite ? "#d9534f" : "#191D31"} // Đỏ nếu đã thích, đen nếu chưa
+                                        tintColor={isFavorite ? "#d9534f" : "#191D31"}
                                     />
                                 </TouchableOpacity>
                                 <TouchableOpacity onPress={() => handleContact('sms')}>
@@ -412,6 +422,30 @@ const Property = () => {
                             </View>
                         </TouchableOpacity>
                     </View>
+
+                    {similarProperties.length > 0 && (
+                        <View className="mt-7">
+                            <Text className="text-black-300 text-xl font-rubik-bold mb-4">
+                                Có thể bạn sẽ thích
+                            </Text>
+                            <FlatList
+                                data={similarProperties}
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={{ gap: 15 }}
+                                keyExtractor={(item) => item.$id}
+                                renderItem={({ item }) => (
+                                    <View style={{ width: 220 }}>
+                                        <Card 
+                                            item={item} 
+                                            onPress={() => router.push(`/properties/${item.$id}`)} 
+                                        />
+                                    </View>
+                                )}
+                            />
+                        </View>
+                    )}
+
                 </View>
             </ScrollView>
 
