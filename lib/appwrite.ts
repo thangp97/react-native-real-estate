@@ -13,11 +13,7 @@ export const config = {
     notificationsCollectionId: 'notifications',
 }
 
-const client = new Client();
-client
-    .setEndpoint(config.endpoint) // Dùng biến đã export
-    .setProject(config.projectId)
-    .setPlatform(config.platform);
+export const client = new Client();
 
 client
     .setEndpoint(config.endpoint!)
@@ -132,7 +128,7 @@ export async function getUserProperties({ userId }) {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
-            [Query.equal('sellerId', userId), Query.orderDesc('$createdAt')]
+            [Query.equal('seller', userId), Query.orderDesc('$createdAt')]
         );
         return result.documents;
     } catch (e) {
@@ -146,7 +142,7 @@ export async function getLastestProperties() {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
-            [Query.or([Query.equal('status', 'available'), Query.equal('status', 'sold')]), Query.orderDesc("$createdAt"), Query.limit(5)]
+            [Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved'), Query.equal('status', 'sold')]), Query.orderDesc("$createdAt"), Query.limit(5)]
         );
         return result.documents;
     } catch (e) {
@@ -155,12 +151,14 @@ export async function getLastestProperties() {
     }
 }
 
-export async function getProperties({filter, query, limit}) {
+export async function getProperties({filter, query, limit, minPrice, maxPrice, bedrooms, area}) {
     try {
-        const buildQuery = [Query.or([Query.equal('status', 'available'), Query.equal('status', 'sold')]), Query.orderDesc('$createdAt')];
+        const buildQuery = [Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved'), Query.equal('status', 'sold')]), Query.orderDesc('$createdAt')];
+        
         if (filter && filter !== 'All') {
             buildQuery.push(Query.equal('type', filter));
         }
+        
         if (query) {
             buildQuery.push(Query.or([
                 Query.search('name', query),
@@ -168,7 +166,14 @@ export async function getProperties({filter, query, limit}) {
                 Query.search('type', query),
             ]));
         }
+
+        if (minPrice) buildQuery.push(Query.greaterThanEqual('price', Number(minPrice)));
+        if (maxPrice) buildQuery.push(Query.lessThanEqual('price', Number(maxPrice)));
+        if (bedrooms) buildQuery.push(Query.greaterThanEqual('bedrooms', Number(bedrooms)));
+        if (area) buildQuery.push(Query.greaterThanEqual('area', Number(area)));
+
         if (limit) buildQuery.push(Query.limit(limit));
+        
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
@@ -177,6 +182,28 @@ export async function getProperties({filter, query, limit}) {
         return result.documents;
     } catch (e) {
         console.error(e);
+        return [];
+    }
+}
+
+export async function getSimilarProperties({ propertyId, type }) {
+    try {
+        const buildQuery = [
+            Query.equal('type', type),
+            Query.notEqual('$id', propertyId),
+            Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved')]),
+            Query.limit(5),
+            Query.orderDesc('$createdAt')
+        ];
+
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            buildQuery
+        );
+        return result.documents;
+    } catch (error) {
+        console.error("Lỗi lấy BĐS tương tự:", error);
         return [];
     }
 }
@@ -191,24 +218,20 @@ export async function getPropertyById({ id }) {
         const property = await databases.getDocument(
             config.databaseId!,
             config.propertiesCollectionId!,
-            id
+            id,
+            [Query.select(['*', 'seller.name', 'seller.email', 'seller.avatar'])] // Yêu cầu trả về các trường của seller
         );
 
         if (!property) return null;
-
-        // Nếu có brokerId, lấy thông tin môi giới
-        if (property.brokerId) {
-            try {
-                const brokerProfile = await databases.getDocument(
-                    config.databaseId!,
-                    config.agentsCollectionId!, // Sửa thành agentsCollectionId
-                    property.brokerId
-                );
-                property.agent = brokerProfile;
-            } catch (err) {
-                console.warn(`Warning: Không tìm thấy thông tin môi giới với ID ${property.brokerId} trong collection Agents. Dùng thông tin mặc định.`);
-                // Không làm gì, property.agent sẽ là undefined -> UI tự fallback
-            }
+        
+        // Gán thông tin seller vào property.agent để frontend không cần thay đổi nhiều
+        if (property.seller) {
+            property.agent = {
+                name: property.seller.name,
+                email: property.seller.email,
+                avatar: property.seller.avatar,
+                // Thêm các trường khác của seller nếu cần thiết cho frontend
+            };
         }
 
         return property;
@@ -238,7 +261,7 @@ export async function uploadFile(file: any) {
 
         // Tự tạo URL view để đảm bảo trả về string chuẩn
         const fileUrl = `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
-
+        
         return fileUrl;
     } catch (error) {
         console.error('Lỗi tải file:', error);
@@ -265,7 +288,7 @@ export async function togglePropertyFavorite(userId: string, propertyId: string,
     try {
         // Đảm bảo currentFavorites luôn là mảng
         let safeFavorites = Array.isArray(currentFavorites) ? [...currentFavorites] : [];
-
+        
         const index = safeFavorites.indexOf(propertyId);
 
         if (index !== -1) {
@@ -307,9 +330,9 @@ export async function createBooking({ userId, agentId, propertyId, date, note })
             config.bookingsCollectionId!,
             ID.unique(),
             {
-                userId,
-                agentId,
-                propertyId,
+                user: userId,
+                agent: agentId,
+                property: propertyId,
                 date,
                 note,
                 status: 'pending'
@@ -322,204 +345,76 @@ export async function createBooking({ userId, agentId, propertyId, date, note })
     }
 }
 
+export async function cancelBooking(bookingId: string) {
+    try {
+        const result = await databases.updateDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            bookingId,
+            {
+                status: 'cancelled'
+            }
+        );
+        return result;
+    } catch (error) {
+        console.error("Lỗi hủy lịch hẹn:", error);
+        throw error;
+    }
+}
+
 export async function getUserBookings(userId) {
     try {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.bookingsCollectionId!,
-            [Query.equal('userId', userId), Query.orderDesc('date')]
+            [Query.equal('user', userId), Query.orderDesc('date')]
         );
 
-        // Lấy thêm thông tin chi tiết BĐS cho mỗi booking
-        const bookingsWithDetails = await Promise.all(result.documents.map(async (booking) => {
+        // Manually fetch property details for each booking to ensure data availability
+        const enrichedBookings = await Promise.all(result.documents.map(async (booking) => {
             try {
-                const property = await databases.getDocument(
-                    config.databaseId!,
-                    config.propertiesCollectionId!,
-                    booking.propertyId
-                );
-                return { ...booking, property };
+                // Case 1: property is a string ID
+                if (booking.property && typeof booking.property === 'string') {
+                    const propertyData = await getPropertyById({ id: booking.property });
+                    if (propertyData) {
+                        booking.property = propertyData;
+                    }
+                } 
+                // Case 2: property is an object but might be incomplete (e.g., missing name)
+                else if (booking.property && typeof booking.property === 'object') {
+                    // If name is missing, likely just a relationship wrapper or partial data
+                    if (!booking.property.name && booking.property.$id) {
+                        const propertyData = await getPropertyById({ id: booking.property.$id });
+                        if (propertyData) {
+                            booking.property = propertyData;
+                        }
+                    }
+                }
+                // Case 3: property is missing (null/undefined) - Data integrity issue
+                // We can't do much if we don't have an ID.
             } catch (err) {
-                return booking; // Nếu lỗi lấy property, trả về booking gốc
+                console.error(`Failed to enrich booking ${booking.$id}:`, err);
             }
+
+            return booking;
         }));
 
-        return bookingsWithDetails;
+        return enrichedBookings;
     } catch (error) {
         console.error("Lỗi lấy danh sách lịch hẹn:", error);
         return [];
     }
 }
-
 export async function getUserNotifications(userId) {
     try {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.notificationsCollectionId!,
-            [Query.equal('userId', userId), Query.orderDesc('$createdAt')]
+            [Query.equal('user', userId), Query.orderDesc('$createdAt')]
         );
         return result.documents;
     } catch (error) {
         console.error("Lỗi lấy thông báo:", error);
         return [];
-    }
-}
-
-export async function getBrokerStats(userId: string) {
-    try {
-        // 1. Đếm số tin đang chờ duyệt trên toàn hệ thống (Work Queue)
-        const pendingDocs = await databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [Query.equal('status', 'pending_approval')] // FIX: Dùng giá trị thật
-        );
-
-        // 2. Đếm số tin BẠN đang quản lý (Active Work)
-        const myActiveDocs = await databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [
-                Query.equal('brokerId', userId),
-                Query.or([
-                    Query.equal('status', 'approved'),
-                    Query.equal('status', 'reviewing'),
-                ])
-            ]
-        );
-
-         // 3. Đếm số tin BẠN đã bán thành công (Sold Count)
-         const mySoldDocs = await databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [
-                Query.equal('brokerId', userId),
-                Query.equal('status', 'sold')
-            ]
-        );
-
-        return {
-            pendingCount: pendingDocs.total,
-            myActiveCount: myActiveDocs.total,
-            mySoldCount: mySoldDocs.total,
-            rating: 4.8,
-        };
-
-    } catch (error) {
-        console.error("Error fetching broker stats (Real Data):", error);
-        return { pendingCount: 0, myActiveCount: 0, mySoldCount: 0, rating: 0 };
-    }
-}
-
-
-/**
- * Lấy danh sách tin "Cần duyệt" (Work Queue) để hiện trên Dashboard (Dữ liệu thật)
- */
-export async function getBrokerRecentProperties(userId: string) {
-    try {
-        const result = await databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [
-                Query.equal('status', 'pending_approval'), // FIX: Dùng giá trị thật
-                Query.orderDesc('$createdAt'),
-                Query.limit(5)
-            ]
-        );
-
-        console.log("LOG: Danh sách tin chờ duyệt (Pending Properties):", JSON.stringify(result.documents.map(d => ({id: d.$id, status: d.status, brokerId: d.brokerId})), null, 2));
-
-        return result.documents;
-    } catch (error) {
-        console.error("Error fetching pending properties (Real Data):", error);
-        return [];
-    }
-}
-
-
-/**
- * Hàm Broker nhận yêu cầu duyệt tin (Pick Task)
- */
-export async function assignPropertyToBroker(propertyId: string, brokerId: string) {
-    if (!propertyId || !brokerId) {
-        throw new Error("Missing propertyId or brokerId.");
-    }
-
-    try {
-        // Cần đảm bảo rằng sau khi Broker nhận việc, họ có thể tiếp tục quản lý tin này.
-        // Cập nhật Document, đồng thời thêm quyền UPDATE và DELETE cho Broker ID
-        const updatedDocument = await databases.updateDocument(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            propertyId,
-            {
-                brokerId: brokerId,
-                status: 'reviewing',
-            },
-            // THÊM QUYỀN GHI MỚI CHO BROKER (Permissions)
-            [
-                // Giữ nguyên quyền đọc công khai (ví dụ: 'any')
-                // Thêm quyền cập nhật/xóa cho Broker mới nhận việc
-                'update("user:' + brokerId + '")',
-                'delete("user:' + brokerId + '")',
-            ]
-        );
-
-        console.log(`LOG: Broker ${brokerId} đã nhận duyệt tin ${propertyId} và cập nhật quyền.`);
-        return updatedDocument;
-
-    } catch (error) {
-        console.error("Lỗi khi Broker nhận việc (Assign Task):", error);
-        // Quan trọng: Trả về lỗi chi tiết để dễ debug hơn
-        throw new Error(`Assignment Failed: ${error.message || 'Unknown Error'}`);
-    }
-}
-
-export async function getMyActiveProperties(userId: string) {
-    try {
-        const result = await databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [
-                Query.equal('brokerId', userId), // Lọc theo ID của Broker
-                Query.notEqual('status', 'sold'), // Loại bỏ các tin đã bán
-                Query.notEqual('status', 'rejected'), // Loại bỏ các tin bị từ chối
-                Query.orderDesc('$updatedAt'), // Tin được cập nhật gần nhất lên đầu
-            ]
-        );
-
-        console.log(`LOG: Danh sách tin đang quản lý của Broker ${userId} (${result.total} tin)`);
-        return result.documents;
-    } catch (error) {
-        console.error("Lỗi khi lấy danh sách tin đang quản lý:", error);
-        return [];
-    }
-}
-
-export async function finalizeVerification(
-    propertyId: string,
-    decision: 'approved' | 'rejected' | 'request_changes',
-    note?: string,
-    proposedPrice?: number
-) {
-    try {
-        const updateData: any = {
-            status: decision,
-            verificationDate: new Date().toISOString(),
-        };
-
-        if (note) updateData.rejectionReason = note;
-        if (proposedPrice) updateData.proposedPrice = proposedPrice;
-
-        const result = await databases.updateDocument(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            propertyId,
-            updateData
-        );
-        return result;
-
-    } catch (error) {
-        console.error("Lỗi khi kết thúc thẩm định:", error);
-        throw error;
     }
 }
