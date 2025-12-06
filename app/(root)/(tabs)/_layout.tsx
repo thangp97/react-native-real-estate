@@ -1,39 +1,69 @@
 // File: app/(root)/(tabs)/_layout.tsx
 
+import { Tabs, Redirect } from 'expo-router';
 import { useGlobalContext } from '@/lib/global-provider';
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, Text, View } from 'react-native';
 
 // Bạn có thể cài đặt và sử dụng thư viện icon này: npm install @expo/vector-icons
 import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, View, Text } from 'react-native';
+import { useEffect } from 'react';
+import { signOut } from '@/lib/appwrite';
+import { Ionicons } from '@expo/vector-icons';
+
+const SignOutAndRedirect = () => {
+    const { refetch } = useGlobalContext();
+    useEffect(() => {
+        const performSignOut = async () => {
+            await signOut();
+            await refetch({});
+        };
+        performSignOut();
+    }, []);
+
+    return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" />
+            <Text style={{ marginTop: 10 }}>Phiên không hợp lệ. Đang đăng xuất...</Text>
+        </View>
+    );
+};
 
 const TabsLayout = () => {
     const { user, loading, isLoggedIn } = useGlobalContext();
 
     if (loading) {
-        return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" />
-            </View>
-        );
+        return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" /></View>;
     }
 
     if (!isLoggedIn || !user) {
         return <Redirect href="/sign-in" />;
     }
 
-    // Người Mua
+    const ProfileTab = (
+        <Tabs.Screen
+            name="profile"
+            options={{
+                title: 'Hồ Sơ',
+                headerShown: false,
+                tabBarIcon: ({ color }) => <Ionicons name="person-circle-outline" size={24} color={color} />
+            }}
+        />
+    );
+
     if (user.role === 'buyer') {
         return (
             <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
                 <Tabs.Screen name="explore" options={{ title: 'Khám Phá', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="search" size={24} color={color} /> }} />
                 <Tabs.Screen name="saved" options={{ title: 'Đã lưu', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="heart" size={24} color={color} /> }} />
                 <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
-
                 {/* Ẩn các tab không liên quan */}
                 <Tabs.Screen name="index" options={{ href: null }} />
                 <Tabs.Screen name="my-properties" options={{ href: null }} />
                 <Tabs.Screen name="dashboard" options={{ href: null }} />
+                <Tabs.Screen name="seller-notifications" options={{ href: null }} />
+                <Tabs.Screen name="notifications" options={{ href: null }} />
             </Tabs>
         );
     }
@@ -42,10 +72,11 @@ const TabsLayout = () => {
     if (user.role === 'seller') {
         return (
             <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
-                <Tabs.Screen name="my-properties" options={{ title: 'BĐS của tôi', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} /> }} />
-                <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
+                <Tabs.Screen name="my-properties" options={{ title: 'BĐS của tôi', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={24} color={color} /> }} />
+                <Tabs.Screen name="seller-notifications" options={{ title: 'Thông báo', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="notifications-outline" size={24} color={color} /> }} />
+                {ProfileTab}
 
-                {/* Ẩn các tab không liên quan */}
+                <Tabs.Screen name="saved" options={{ href: null }} />
                 <Tabs.Screen name="index" options={{ href: null }} />
                 <Tabs.Screen name="explore" options={{ href: null }} />
                 <Tabs.Screen name="dashboard" options={{ href: null }} />
@@ -65,11 +96,13 @@ const TabsLayout = () => {
                 <Tabs.Screen name="index" options={{ href: null }} />
                 <Tabs.Screen name="explore" options={{ href: null }} />
                 <Tabs.Screen name="my-properties" options={{ href: null }} />
-                <Tabs.Screen name="saved" options={{ href: null }} />
+                <Tabs.Screen name="seller-notifications" options={{ href: null }} />
+                <Tabs.Screen name="notifications" options={{ href: null }} />
             </Tabs>
         );
     }
-    return <Text>Không thể xác định vai trò người dùng.</Text>;
+
+    return <SignOutAndRedirect />;
 };
 
 export default TabsLayout;

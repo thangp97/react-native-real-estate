@@ -9,9 +9,9 @@ export const config = {
     profilesCollectionId: 'profiles',
     agentsCollectionId: 'agents', // Thêm collection Agents
     propertiesCollectionId: 'properties',
+    galleriesCollectionId: 'galleries',
     bookingsCollectionId: 'bookings',
     notificationsCollectionId: 'notifications',
-    galleriesCollectionId: 'galleries',
 }
 
 export const client = new Client();
@@ -26,45 +26,24 @@ export const avatar = new Avatars(client);
 export const databases = new Databases(client);
 export const storage = new Storage(client);
 
-// --- AUTHENTICATION FUNCTIONS ---
-
-export async function createUser(email, password, username, role) {
+export async function createUser(email: string, password, username: string, role: string) {
     try {
-        const newAccount = await account.create(
-            ID.unique(),
-            email,
-            password,
-            username
-        );
-
+        const newAccount = await account.create(ID.unique(), email, password, username);
         if (!newAccount) throw Error("Không thể tạo tài khoản");
-
-        const avatarUrl = avatar.getInitials(username);
-
-        return await databases.createDocument(
-            config.databaseId!,
-            config.profilesCollectionId!,
-            newAccount.$id,
-            {
-                role: role,
-                name: username,
-                email: email,
-                avatar: avatarUrl.href,
-            }
-        );
-    } catch (error) {
+        return await databases.createDocument(config.databaseId!, config.profilesCollectionId!, newAccount.$id, { role: role });
+    } catch (error: any) {
         console.log("Lỗi createUser:", error);
-        throw new Error(error);
+        throw new Error(error.message);
     }
 }
 
-export async function signIn(email, password) {
+export async function signIn(email: string, password) {
     try {
         try { await account.deleteSession('current'); } catch (_) { /* Bỏ qua lỗi nếu không có session */ }
         return await account.createEmailPasswordSession(email, password);
-    } catch (error) {
+    } catch (error: any) {
         console.log("Lỗi signIn:", error);
-        throw new Error(error);
+        throw new Error(error.message);
     }
 }
 
@@ -72,73 +51,48 @@ export async function getCurrentUser() {
     try {
         const currentAccount = await account.get();
         if (!currentAccount) return null;
-
-        const userProfile = await databases.getDocument(
-            config.databaseId!,
-            config.profilesCollectionId!,
-            currentAccount.$id
-        );
-
+        const userProfile = await databases.getDocument(config.databaseId!, config.profilesCollectionId!, currentAccount.$id);
         return { ...currentAccount, ...userProfile };
-
-    } catch (error) {
+    } catch (error: any) {
         if (error.code === 404) {
             try {
                 console.log("Không tìm thấy profile, đang tự động tạo...");
                 const currentAccount = await account.get();
-                const avatarUrl = avatar.getInitials(currentAccount.name);
-                
-                const newProfile = await databases.createDocument(
-                    config.databaseId!,
-                    config.profilesCollectionId!,
-                    currentAccount.$id,
-                    {
-                        role: 'buyer',
-                        name: currentAccount.name,
-                        email: currentAccount.email,
-                        avatar: avatarUrl.href
-                    }
-                );
+                if(!currentAccount) return null;
+                const newProfile = await databases.createDocument(config.databaseId!, config.profilesCollectionId!, currentAccount.$id, { role: 'buyer' });
                 return { ...currentAccount, ...newProfile };
             } catch (createError) {
                 console.error("Lỗi khi đang tự tạo profile:", createError);
                 return null;
             }
-        } else {
-            console.error("Lỗi không xác định trong getCurrentUser:", error);
-            return null;
         }
+        return null;
     }
 }
 
 export async function signOut() {
     try {
         return await account.deleteSession('current');
-    } catch (error) {
+    } catch (error: any) {
         console.log("Lỗi signOut:", error);
-        throw new Error(error);
+        throw new Error(error.message);
     }
 }
 
-
-// --- DATABASE FUNCTIONS ---
-// **FIX: Sửa lại định nghĩa hàm để nhận một đối tượng**
-export async function getUserProperties({ userId }) {
+export async function getUserProperties({ userId }: { userId: string }) {
     if (!userId) return [];
     try {
-        const result = await databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [Query.equal('seller', userId), Query.orderDesc('$createdAt')]
-        );
+        // **FIX: Thay 'sellerId' bằng 'seller'**
+        const result = await databases.listDocuments(config.databaseId!, config.propertiesCollectionId!, [Query.equal('seller', userId), Query.orderDesc('$createdAt')]);
         return result.documents;
-    } catch (e) {
+    } catch (e: any) {
         console.error("Lỗi khi lấy BĐS của người dùng:", e);
         return [];
     }
 }
 
-export async function getLastestProperties() {
+export async function getPropertyById({ id }: { id: string }) {
+    if (!id) return null;
     try {
         const result = await databases.listDocuments(
             config.databaseId!,
@@ -155,11 +109,11 @@ export async function getLastestProperties() {
 export async function getProperties({filter, query, limit, minPrice, maxPrice, bedrooms, area}) {
     try {
         const buildQuery = [Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved'), Query.equal('status', 'sold')]), Query.orderDesc('$createdAt')];
-        
+
         if (filter && filter !== 'All') {
             buildQuery.push(Query.equal('type', filter));
         }
-        
+
         if (query) {
             buildQuery.push(Query.or([
                 Query.search('name', query),
@@ -174,7 +128,7 @@ export async function getProperties({filter, query, limit, minPrice, maxPrice, b
         if (area) buildQuery.push(Query.greaterThanEqual('area', Number(area)));
 
         if (limit) buildQuery.push(Query.limit(limit));
-        
+
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
@@ -224,7 +178,7 @@ export async function getPropertyById({ id }) {
         );
 
         if (!property) return null;
-        
+
         // Gán thông tin seller vào property.agent để frontend không cần thay đổi nhiều
         if (property.seller) {
             property.agent = {
@@ -248,21 +202,13 @@ export async function getPropertyById({ id }) {
         return property;
 
     } catch (error) {
-        console.error("Lỗi khi lấy chi tiết bất động sản:", error);
+        console.error(error);
         return null;
     }
 }
 
-export async function uploadFile(file: any) {
-    if (!file) return null;
-
-    const asset = {
-        name: file.fileName || `${ID.unique()}.jpg`,
-        type: file.mimeType,
-        size: file.fileSize,
-        uri: file.uri,
-    };
-
+export async function getPropertyGallery({ propertyId }: { propertyId: string }) {
+    if (!propertyId) return [];
     try {
         const uploadedFile = await storage.createFile(
             config.storageId!,
@@ -334,6 +280,16 @@ export async function getSavedProperties(favoriteIds: string[]) {
     }
 }
 
+export async function getAgentById({ agentId }: { agentId: string }) {
+    if (!agentId) return null;
+    try {
+        return await databases.getDocument(config.databaseId!, config.profilesCollectionId!, agentId);
+    } catch (error) {
+        console.error("Lỗi khi lấy thông tin agent:", error);
+        return null;
+    }
+}
+
 export async function createBooking({ userId, agentId, propertyId, date, note }) {
     try {
         const booking = await databases.createDocument(
@@ -353,6 +309,28 @@ export async function createBooking({ userId, agentId, propertyId, date, note })
     } catch (error) {
         console.error("Lỗi tạo lịch hẹn:", error);
         throw error;
+    }
+}
+
+export async function deleteProperty({ propertyId }: { propertyId: string }) {
+    if (!propertyId) throw new Error("Cần có ID của bất động sản");
+    try {
+        const galleryItems = await getPropertyGallery({ propertyId });
+        const deleteFilePromises = galleryItems.map(item => {
+            const fileId = item.image.split('/files/')[1].split('/view')[0];
+            return storage.deleteFile(config.storageId!, fileId);
+        });
+        await Promise.all(deleteFilePromises);
+
+        const deleteDocPromises = galleryItems.map(item => databases.deleteDocument(config.databaseId!, config.galleriesCollectionId!, item.$id));
+        await Promise.all(deleteDocPromises);
+
+        await databases.deleteDocument(config.databaseId!, config.propertiesCollectionId!, propertyId);
+
+        return true;
+    } catch (error: any) {
+        console.error("Lỗi khi xóa bất động sản:", error);
+        throw new Error(error.message);
     }
 }
 
@@ -415,7 +393,7 @@ export async function getUserBookings(userId) {
                     if (propertyData) {
                         booking.property = propertyData;
                     }
-                } 
+                }
                 // Case 2: property is an object but might be incomplete (e.g., missing name)
                 else if (booking.property && typeof booking.property === 'object') {
                     // If name is missing, likely just a relationship wrapper or partial data
@@ -441,16 +419,19 @@ export async function getUserBookings(userId) {
         return [];
     }
 }
-export async function getUserNotifications(userId) {
+
+
+export async function getUserNotifications({ userId }: { userId: string }) {
+    if (!userId) return [];
     try {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.notificationsCollectionId!,
-            [Query.equal('user', userId), Query.orderDesc('$createdAt')]
+            [Query.equal('userId', userId), Query.orderDesc('$createdAt')]
         );
         return result.documents;
-    } catch (error) {
-        console.error("Lỗi lấy thông báo:", error);
+    } catch (e: any) {
+        console.error("Lỗi khi lấy thông báo:", e);
         return [];
     }
 }

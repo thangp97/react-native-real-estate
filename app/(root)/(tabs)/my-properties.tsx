@@ -7,10 +7,8 @@ import { useAppwrite } from '@/lib/useAppwrite';
 import { getUserProperties } from '@/lib/appwrite';
 import { Models } from 'react-native-appwrite';
 
-// **FIX: Định nghĩa kiểu cho các trạng thái**
 type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';
 
-// **FIX: Định nghĩa interface cho một document bất động sản**
 interface PropertyDocument extends Models.Document {
     name: string;
     price: number;
@@ -18,7 +16,6 @@ interface PropertyDocument extends Models.Document {
     status: PropertyStatus;
 }
 
-// Hàm helper để định dạng trạng thái và màu sắc
 const formatStatus = (status: PropertyStatus) => {
     const statuses: Record<PropertyStatus, string> = {
         'pending_approval': 'Chờ duyệt',
@@ -33,17 +30,16 @@ const formatStatus = (status: PropertyStatus) => {
 
 const getStatusColor = (status: PropertyStatus) => {
     const colors: Record<PropertyStatus, string> = {
-        'pending_approval': '#f0ad4e', // Vàng
-        'for_sale': '#5cb85c',       // Xanh lá
-        'deposit_paid': '#337ab7',       // Xanh dương
-        'sold': '#d9534f',       // Đỏ
-        'rejected': '#777',          // Xám
-        'expired': '#777'           // Xám
+        'pending_approval': '#f0ad4e',
+        'for_sale': '#5cb85c',
+        'deposit_paid': '#337ab7',
+        'sold': '#d9534f',
+        'rejected': '#777',
+        'expired': '#777'
     };
     return colors[status] || '#777';
 };
 
-// **FIX: Thêm kiểu cho prop 'item'**
 const PropertyCard = ({ item }: { item: PropertyDocument }) => (
     <View style={styles.card}>
         <Image source={{ uri: item.image }} style={styles.cardImage} resizeMode="cover" />
@@ -60,37 +56,40 @@ const PropertyCard = ({ item }: { item: PropertyDocument }) => (
 const MyProperties = () => {
     const { user } = useGlobalContext();
     
-    // **FIX: Sửa lại cách gọi useAppwrite**
     const { data: properties, refetch, loading } = useAppwrite({
         fn: getUserProperties,
         params: { userId: user?.$id },
-        skip: !user?.$id // Bỏ qua lần fetch đầu tiên nếu chưa có user ID
+        skip: !user?.$id
     });
 
     const [refreshing, setRefreshing] = useState(false);
 
     const onRefresh = async () => {
         setRefreshing(true);
-        // **FIX: Sửa lại cách gọi refetch**
         if (user?.$id) {
             await refetch({ userId: user.$id });
         }
         setRefreshing(false);
     };
 
-    // Tự động fetch lại khi có user
     useEffect(() => {
         if (user?.$id) {
             refetch({ userId: user.$id });
         }
-    }, [user]);
+    }, [user?.$id]);
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
             <FlatList
-                data={properties as PropertyDocument[] | null} // **FIX: Ép kiểu cho data**
+                data={properties as PropertyDocument[] | null}
                 keyExtractor={(item) => item.$id}
-                renderItem={({ item }) => <PropertyCard item={item} />}
+                renderItem={({ item }) => (
+                    <Link href={{ pathname: "/property-details", params: { id: item.$id } }} asChild>
+                        <TouchableOpacity>
+                            <PropertyCard item={item} />
+                        </TouchableOpacity>
+                    </Link>
+                )}
                 ListHeaderComponent={() => (
                     <View style={styles.header}>
                         <Text style={styles.headerTitle}>Bất động sản của tôi</Text>
