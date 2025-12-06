@@ -4,7 +4,7 @@ import { Link } from 'expo-router';
 import icons from '@/constants/icons';
 import { useGlobalContext } from '@/lib/global-provider';
 import { useAppwrite } from '@/lib/useAppwrite';
-import { getUserNotifications } from '@/lib/appwrite';
+import { getUserNotifications } from '@/lib/api/buyer';
 import { Models } from 'react-native-appwrite';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';

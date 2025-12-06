@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalContext } from '@/lib/global-provider';
-import { getMyActiveProperties } from '@/lib/appwrite';
+import { getMyActiveProperties } from '@/lib/api/seller';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import PropertyCard from '@/components/PropertyCard'; // Component Card để tái sử dụng

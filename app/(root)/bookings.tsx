@@ -2,7 +2,7 @@ import { View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useState } from 'react';
 import { useGlobalContext } from '@/lib/global-provider';
-import { getUserBookings, cancelBooking } from '@/lib/appwrite';
+import { getUserBookings, cancelBooking } from '@/lib/api/buyer';
 import { useRouter } from 'expo-router';
 import icons from '@/constants/icons';
 

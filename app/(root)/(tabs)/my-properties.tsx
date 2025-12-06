@@ -4,7 +4,7 @@ import { Link } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalContext } from '@/lib/global-provider';
 import { useAppwrite } from '@/lib/useAppwrite';
-import { getUserProperties } from '@/lib/appwrite';
+import { getUserProperties } from '@/lib/api/seller';
 import { Models } from 'react-native-appwrite';
 
 type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';

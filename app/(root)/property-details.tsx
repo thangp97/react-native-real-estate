@@ -19,7 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import icons from "@/constants/icons";
 import { useGlobalContext } from "@/lib/global-provider";
 import { useAppwrite } from "@/lib/useAppwrite";
-import { getPropertyById, getAgentById, getPropertyGallery, deleteProperty } from "@/lib/appwrite";
+import { getPropertyById } from "@/lib/api/buyer";
+import { getAgentById } from "@/lib/api/broker";
+import { getPropertyGallery, deleteProperty } from "@/lib/api/seller";
 import { Models } from "react-native-appwrite";
 
 const REGIONS = {

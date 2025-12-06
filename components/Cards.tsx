@@ -1,11 +1,11 @@
-import {View, Text, TouchableOpacity, Image} from 'react-native'
+import { View, Text, TouchableOpacity, Image } from 'react-native'
 import React from 'react'
-import images from "@/constants/images";
-import icons from "@/constants/icons";
-import {Models} from "react-native-appwrite";
+import images from '@/constants/images';
+import icons from '@/constants/icons';
+import { Models } from 'react-native-appwrite';
 
 interface Props {
-    item: Models.Document,
+    item: Models.Document;
     onPress?: () => void;
 }
 

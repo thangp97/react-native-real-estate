@@ -1,14 +1,14 @@
-import { View, Text, Image } from "react-native";
+import { View, Text, Image } from 'react-native'
+import React from 'react'
+import images from '@/constants/images'
+import icons from '@/constants/icons'
+import { Models } from 'react-native-appwrite'
 
-import images from "@/constants/images";
-import icons from "@/constants/icons";
-import { Models } from "react-native-appwrite";
-
-interface Props {
+interface CommentProps {
     item: Models.Document;
 }
 
-const Comment = ({ item }: Props) => {
+const Comment = ({item}: CommentProps) => {
     return (
         <View className="flex flex-col items-start">
             <View className="flex flex-row items-center">

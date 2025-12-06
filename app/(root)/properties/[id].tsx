@@ -29,7 +29,7 @@ import { facilities } from "@/constants/data";
 import { Card } from "@/components/Cards";
 
 import { useAppwrite } from "@/lib/useAppwrite";
-import { getPropertyById, togglePropertyFavorite, createBooking, getSimilarProperties } from "@/lib/appwrite";
+import { getPropertyById, togglePropertyFavorite, createBooking, getSimilarProperties } from "@/lib/api/buyer";
 import { useGlobalContext } from "@/lib/global-provider";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useComparisonContext } from "@/lib/comparison-provider";
@@ -114,7 +114,11 @@ const Property = () => {
 
     useEffect(() => {
         if (user?.favorites && Array.isArray(user.favorites) && id) {
-            setIsFavorite(user.favorites.includes(id));
+            const isFav = user.favorites.some((item: any) => {
+                const itemId = typeof item === 'string' ? item : item.$id;
+                return itemId === id;
+            });
+            setIsFavorite(isFav);
         }
     }, [user, id]);
 
@@ -150,7 +154,11 @@ const Property = () => {
 
         setToggling(true);
         try {
-            const currentFavorites = user.favorites || [];
+            // Extract IDs if favorites are objects
+            const currentFavorites = (user.favorites || []).map((item: any) => 
+                typeof item === 'string' ? item : item.$id
+            );
+            
             const newFavorites = await togglePropertyFavorite(user.$id, id, currentFavorites);
             
             const isNowFavorite = newFavorites.includes(id);

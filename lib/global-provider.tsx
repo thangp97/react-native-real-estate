@@ -1,13 +1,14 @@
-import {createContext, ReactNode, useContext} from "react";
-import {useAppwrite} from "@/lib/useAppwrite";
-import {getCurrentUser} from "./appwrite";
+import { createContext, useContext, ReactNode } from "react";
+import { useAppwrite } from "@/lib/useAppwrite";
+import { getCurrentUser } from "./appwrite";
 
 interface User {
-    role: string;
     $id: string;
     name: string;
     email: string;
     avatar: string;
+    role: string;
+    favorites?: string[]; // Add favorites
 }
 
 interface GlobalContextType {
@@ -15,43 +16,43 @@ interface GlobalContextType {
     user: User | null;
     loading: boolean;
     refetch: (newParams?: Record<string, string | number>) => Promise<void>;
-    setUser: (user: User | null) => void;
+    setUser?: (user: User) => void; // Add setUser
 }
 
 const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
 
-export const GlobalProvider = ({children}: {children: ReactNode}) => {
+export const GlobalProvider = ({ children }: { children: ReactNode }) => {
     const {
         data: user,
         loading,
         refetch,
-        setData
+        setData: setUser // Get setData
     } = useAppwrite({
         fn: getCurrentUser,
-    })
+    });
 
-    const isLoggedIn = !!user;
-    console.log(JSON.stringify(user,null,2));
+    const isLogged = !!user;
+
+    // Type assertion to match User interface since getCurrentUser returns a merged object
+    const typedUser = user as unknown as User | null;
 
     return (
         <GlobalContext.Provider value={{
-            isLoggedIn,
-            user,
+            isLoggedIn: isLogged,
+            user: typedUser,
             loading,
             refetch,
-            setUser: setData as any
+            setUser: (newUser: User) => setUser(newUser as any) // Implement setUser
         }}>
             {children}
         </GlobalContext.Provider>
-    )
-}
+    );
+};
 
-export const useGlobalContext = () : GlobalContextType => {
+export const useGlobalContext = (): GlobalContextType => {
     const context = useContext(GlobalContext);
-
-    if (!context) {
-        throw new Error('useGlobalContext must be used within a GlobalProvider');
-    }
+    if (!context)
+        throw new Error("useGlobalContext must be used within a GlobalProvider");
 
     return context;
 }

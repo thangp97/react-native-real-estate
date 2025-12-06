@@ -17,7 +17,7 @@ import Search from "@/components/Search";
 import { Card } from "@/components/Cards";
 import Filters from "@/components/Filters";
 import { useAppwrite } from "@/lib/useAppwrite";
-import { getProperties } from "@/lib/appwrite";
+import { getProperties } from "@/lib/api/buyer";
 import { useEffect, useState } from "react";
 import NoResults from "@/components/NoResults";
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';

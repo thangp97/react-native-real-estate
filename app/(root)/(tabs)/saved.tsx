@@ -4,7 +4,7 @@ import {SafeAreaView} from "react-native-safe-area-context";
 import icons from "@/constants/icons";
 import {Card} from "@/components/Cards";
 import {useGlobalContext} from "@/lib/global-provider";
-import {getSavedProperties} from "@/lib/appwrite";
+import {getSavedProperties} from "@/lib/api/buyer";
 import {useState, useEffect} from "react";
 
 export default function Saved() {
@@ -16,7 +16,12 @@ export default function Saved() {
         if (user?.favorites && user.favorites.length > 0) {
             setLoading(true);
             try {
-                const result = await getSavedProperties(user.favorites);
+                // Safely extract IDs if favorites is an array of objects
+                const favoriteIds = user.favorites.map((item: any) => 
+                    typeof item === 'string' ? item : item.$id
+                );
+                
+                const result = await getSavedProperties(favoriteIds);
                 setProperties(result);
             } catch (error) {
                 console.error(error);

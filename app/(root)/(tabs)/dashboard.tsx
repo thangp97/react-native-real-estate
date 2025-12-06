@@ -5,7 +5,7 @@ import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator, Ref
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalContext } from '@/lib/global-provider';
 // Import các hàm API thật
-import { getBrokerStats, getBrokerRecentProperties, assignPropertyToBroker } from '@/lib/appwrite';
+import { getBrokerStats, getBrokerRecentProperties, assignPropertyToBroker } from '@/lib/api/broker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
