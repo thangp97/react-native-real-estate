@@ -15,27 +15,35 @@ import {
     Button,
     KeyboardAvoidingView,
     TouchableWithoutFeedback,
-    Keyboard
+    Keyboard,
+    Share // Added Share
 } from "react-native";
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import icons from "@/constants/icons";
 import images from "@/constants/images";
 import Comment from "@/components/Comment";
 import { facilities } from "@/constants/data";
+import { Card } from "@/components/Cards";
 
 import { useAppwrite } from "@/lib/useAppwrite";
-import { getPropertyById, togglePropertyFavorite, createBooking } from "@/lib/appwrite";
+import { getPropertyById, togglePropertyFavorite, createBooking, getSimilarProperties } from "@/lib/appwrite";
 import { useGlobalContext } from "@/lib/global-provider";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useComparisonContext } from "@/lib/comparison-provider";
+import MortgageCalculator from "@/components/MortgageCalculator";
 
-type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';
-
+type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'approved' | 'available';
+// ... (keep existing helper functions: formatStatus, getStatusColor) ...
 // Hàm helper để định dạng trạng thái và màu sắc
 const formatStatus = (status: PropertyStatus) => {
     const statuses: Record<PropertyStatus, string> = {
         'pending_approval': 'Chờ duyệt',
         'for_sale': 'Đang bán',
+        'available': 'Đang bán',
+        'approved': 'Đang bán',
         'deposit_paid': 'Đã cọc',
         'sold': 'Đã bán',
         'rejected': 'Bị từ chối',
@@ -48,19 +56,23 @@ const getStatusColor = (status: PropertyStatus) => {
     const colors: Record<PropertyStatus, string> = {
         'pending_approval': '#f0ad4e', // Vàng
         'for_sale': '#5cb85c',       // Xanh lá
-        'deposit_paid': '#337ab7',       // Xanh dương
-        'sold': '#d9534f',       // Đỏ
+        'available': '#5cb85c',      // Xanh lá
+        'approved': '#5cb85c',       // Xanh lá
+        'deposit_paid': '#337ab7',   // Xanh dương
+        'sold': '#d9534f',           // Đỏ
         'rejected': '#777',          // Xám
-        'expired': '#777'           // Xám
+        'expired': '#777'            // Xám
     };
     return colors[status] || '#777';
 };
 
 const Property = () => {
     const { id } = useLocalSearchParams<{ id?: string }>();
-    const { user, refetch: refetchUser, setUser } = useGlobalContext(); // Lấy thêm hàm setUser
+    const { user, refetch: refetchUser, setUser } = useGlobalContext();
+    const { addToCompare, removeFromCompare, isInCompare, compareList, clearCompare } = useComparisonContext();
 
     const windowHeight = Dimensions.get("window").height;
+    const windowWidth = Dimensions.get("window").width;
 
     const { data: property, loading: loadingProperty } = useAppwrite({
         fn: getPropertyById,
@@ -68,6 +80,8 @@ const Property = () => {
             id: id!,
         },
     });
+
+    const [similarProperties, setSimilarProperties] = useState<any[]>([]);
 
     // State cho favorites
     const [isFavorite, setIsFavorite] = useState(false);
@@ -77,13 +91,55 @@ const Property = () => {
     const [bookingModalVisible, setBookingModalVisible] = useState(false);
     const [bookingNote, setBookingNote] = useState('');
     const [isBooking, setIsBooking] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
+
+    // State cho comparison modal
+    const [comparisonModalVisible, setComparisonModalVisible] = useState(false);
+
+    // Carousel Logic
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const allImages = property ? [property.image, ...(property.galleryImages || [])].filter(Boolean) : [];
+
+    const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+        if (viewableItems.length > 0) {
+            setCurrentImageIndex(viewableItems[0].index || 0);
+        }
+    }, []);
+
+    const viewabilityConfig = {
+        itemVisiblePercentThreshold: 50
+    };
 
     useEffect(() => {
-        // Kiểm tra xem user có danh sách favorites không và property hiện tại có trong đó không
         if (user?.favorites && Array.isArray(user.favorites) && id) {
             setIsFavorite(user.favorites.includes(id));
         }
     }, [user, id]);
+
+    useEffect(() => {
+        const fetchSimilar = async () => {
+            if (property?.type && id) {
+                const similar = await getSimilarProperties({ 
+                    propertyId: id, 
+                    type: property.type 
+                });
+                setSimilarProperties(similar);
+            }
+        };
+        fetchSimilar();
+    }, [property, id]);
+
+    // Khởi tạo ngày mặc định là ngày mai 9h sáng
+    useEffect(() => {
+        if (bookingModalVisible) {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(9, 0, 0, 0);
+            setSelectedDate(tomorrow);
+        }
+    }, [bookingModalVisible]);
 
     const handleToggleFavorite = async () => {
         if (!user) {
@@ -97,11 +153,9 @@ const Property = () => {
             const currentFavorites = user.favorites || [];
             const newFavorites = await togglePropertyFavorite(user.$id, id, currentFavorites);
             
-            // Update local state
             const isNowFavorite = newFavorites.includes(id);
             setIsFavorite(isNowFavorite);
             
-            // Cập nhật Global User State ngay lập tức (Optimistic Update)
             if (setUser) {
                 setUser({
                     ...user,
@@ -109,7 +163,6 @@ const Property = () => {
                 });
             }
             
-            // Hiển thị thông báo thành công
             Alert.alert(
                 "Thành công",
                 isNowFavorite ? "Đã thêm vào mục yêu thích!" : "Đã xóa khỏi mục yêu thích."
@@ -117,14 +170,34 @@ const Property = () => {
             
         } catch (error) {
             Alert.alert("Lỗi", "Không thể lưu tin. Vui lòng thử lại.");
-            // Revert state nếu lỗi
             setIsFavorite(isFavorite); 
         } finally {
             setToggling(false);
         }
     };
 
-    // Thông tin liên hệ của Sàn / Môi giới (Fallback)
+    const handleToggleCompare = () => {
+        if (!property) return;
+        
+        if (isInCompare(property.$id)) {
+            removeFromCompare(property.$id);
+            Alert.alert("Đã xóa", "Đã xóa khỏi danh sách so sánh.");
+        } else {
+            addToCompare({
+                $id: property.$id,
+                name: property.name,
+                price: property.price,
+                area: property.area,
+                bedrooms: property.bedrooms,
+                bathrooms: property.bathrooms,
+                address: property.address,
+                image: property.image,
+                type: property.type,
+                facilities: property.facilities || []
+            });
+        }
+    };
+
     const DEFAULT_BROKER_ID = "66a010d1000b213b2e59"; 
 
     const PLATFORM_DEFAULT_BROKER = {
@@ -134,7 +207,6 @@ const Property = () => {
         avatar: images.avatar
     };
 
-    // Xác định môi giới hiện tại: ưu tiên từ property.agent, nếu không thì dùng mặc định sàn
     const currentBroker = property?.agent ? {
         name: property.agent.name,
         phone: property.agent.phone || PLATFORM_DEFAULT_BROKER.phone,
@@ -145,10 +217,7 @@ const Property = () => {
     const handleOpenMap = () => {
         const address = property?.address;
         if (!address) return;
-
-        // Luôn sử dụng Google Maps URL
         const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-
         Linking.openURL(url).catch(err => console.error('Không thể mở Google Maps:', err));
     };
 
@@ -165,6 +234,47 @@ const Property = () => {
         }
     };
 
+    const onChangeDate = (event: any, date?: Date) => {
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
+        if (date) {
+            setSelectedDate(date);
+        }
+    };
+
+    const showMode = (currentMode: 'date' | 'time') => {
+        setShowDatePicker(true);
+        setDatePickerMode(currentMode);
+    };
+
+    const handleShare = async () => {
+        if (!property) return;
+
+        try {
+            const deepLinkBase = 'restate://properties/';
+            const propertyLink = `${deepLinkBase}${property.$id}`;
+
+            const result = await Share.share({
+                message: `Xem bất động sản "${property.name}" với giá ${property.price?.toLocaleString('vi-VN')} VND tại ${property.address} trên ứng dụng của chúng tôi! Chi tiết: ${propertyLink}`,
+                url: propertyLink
+            });
+
+            if (result.action === Share.sharedAction) {
+                if (result.activityType) {
+                    console.log('Shared with:', result.activityType);
+                } else {
+                    console.log('Shared successfully');
+                }
+            } else if (result.action === Share.dismissedAction) {
+                console.log('Share dismissed');
+            }
+        } catch (error: any) {
+            Alert.alert("Lỗi", "Không thể chia sẻ. Vui lòng thử lại.");
+            console.error(error.message);
+        }
+    };
+
     const handleBookViewing = async () => {
         if (!user) {
              Alert.alert("Thông báo", "Vui lòng đăng nhập để đặt lịch.");
@@ -175,15 +285,11 @@ const Property = () => {
 
         setIsBooking(true);
         try {
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            tomorrow.setHours(9, 0, 0, 0); // 9 giờ sáng
-
             await createBooking({
                 userId: user.$id,
                 agentId: targetAgentId,
                 propertyId: id,
-                date: tomorrow.toISOString(),
+                date: selectedDate.toISOString(),
                 note: bookingNote
             });
 
@@ -199,17 +305,29 @@ const Property = () => {
     };
 
     return (
-        <View>
+        <View style={{ flex: 1 }}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerClassName="pb-32 bg-white"
             >
                 <View className="relative w-full" style={{ height: windowHeight / 2 }}>
-                    <Image
-                        source={{ uri: property?.image }}
-                        className="size-full"
-                        resizeMode="cover"
+                    <FlatList
+                        data={allImages}
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        keyExtractor={(item, index) => index.toString()}
+                        onViewableItemsChanged={onViewableItemsChanged}
+                        viewabilityConfig={viewabilityConfig}
+                        renderItem={({ item }) => (
+                            <Image
+                                source={{ uri: item }}
+                                style={{ width: windowWidth, height: windowHeight / 2 }}
+                                resizeMode="cover"
+                            />
+                        )}
                     />
+                    
                     <Image
                         source={images.whiteGradient}
                         className="absolute top-0 w-full z-40"
@@ -230,19 +348,46 @@ const Property = () => {
                             </TouchableOpacity>
 
                             <View className="flex flex-row items-center gap-3">
+                                <TouchableOpacity 
+                                    onPress={handleShare}
+                                    className="flex flex-row bg-white/90 rounded-full size-11 items-center justify-center shadow-sm"
+                                >
+                                    <Image
+                                        source={icons.send} // Using send icon for share
+                                        className="size-6"
+                                        tintColor={"#191D31"}
+                                    />
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    onPress={handleToggleCompare} 
+                                    className="flex flex-row bg-white/90 rounded-full size-11 items-center justify-center shadow-sm"
+                                >
+                                    <Image
+                                        source={icons.info} 
+                                        className="size-6"
+                                        tintColor={isInCompare(id!) ? "#0061FF" : "#191D31"}
+                                    />
+                                </TouchableOpacity>
                                 <TouchableOpacity onPress={handleToggleFavorite} disabled={toggling}>
                                     <Image
                                         source={icons.heart}
                                         className="size-7"
-                                        tintColor={isFavorite ? "#d9534f" : "#191D31"} // Đỏ nếu đã thích, đen nếu chưa
+                                        tintColor={isFavorite ? "#d9534f" : "#191D31"}
                                     />
                                 </TouchableOpacity>
-                                <TouchableOpacity onPress={() => handleContact('sms')}>
-                                     <Image source={icons.send} className="size-7" />
-                                </TouchableOpacity>
+                                
                             </View>
                         </View>
                     </View>
+
+                    {/* Page Indicator */}
+                    {allImages.length > 1 && (
+                        <View className="absolute bottom-5 right-5 bg-black/50 px-3 py-1 rounded-full z-50">
+                            <Text className="text-white font-rubik-medium text-xs">
+                                {currentImageIndex + 1} / {allImages.length}
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 <View className="px-5 mt-7 flex gap-2">
@@ -367,27 +512,7 @@ const Property = () => {
                         )}
                     </View>
 
-                    {property?.gallery?.length > 0 && (
-                        <View className="mt-7">
-                            <Text className="text-black-300 text-xl font-rubik-bold">
-                                Thư viện ảnh
-                            </Text>
-                            <FlatList
-                                contentContainerStyle={{ paddingRight: 20 }}
-                                data={property?.gallery}
-                                keyExtractor={(item) => item.$id}
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                renderItem={({ item }) => (
-                                    <Image
-                                        source={{ uri: item.image }}
-                                        className="size-40 rounded-xl"
-                                    />
-                                )}
-                                contentContainerClassName="flex gap-4 mt-3"
-                            />
-                        </View>
-                    )}
+
 
                     <View className="mt-7">
                         <Text className="text-black-300 text-xl font-rubik-bold">
@@ -412,6 +537,32 @@ const Property = () => {
                             </View>
                         </TouchableOpacity>
                     </View>
+                    
+                    {property?.price && <MortgageCalculator propertyPrice={property.price} />}
+
+                    {similarProperties.length > 0 && (
+                        <View className="mt-7">
+                            <Text className="text-black-300 text-xl font-rubik-bold mb-4">
+                                Có thể bạn sẽ thích
+                            </Text>
+                            <FlatList
+                                data={similarProperties}
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={{ gap: 15 }}
+                                keyExtractor={(item) => item.$id}
+                                renderItem={({ item }) => (
+                                    <View style={{ width: 220 }}>
+                                        <Card 
+                                            item={item} 
+                                            onPress={() => router.push(`/properties/${item.$id}`)} 
+                                        />
+                                    </View>
+                                )}
+                            />
+                        </View>
+                    )}
+
                 </View>
             </ScrollView>
 
@@ -459,6 +610,21 @@ const Property = () => {
                 </View>
             </View>
 
+            {/* Floating Compare Button */}
+            {compareList.length > 0 && (
+                <View className="absolute bottom-28 right-5 z-50">
+                    <TouchableOpacity
+                        onPress={() => setComparisonModalVisible(true)}
+                        className="bg-primary-300 px-4 py-3 rounded-full shadow-lg flex-row items-center gap-2"
+                    >
+                        <Image source={icons.info} className="size-5" tintColor="white" />
+                        <Text className="text-white font-rubik-bold">
+                            So sánh ({compareList.length})
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             <Modal
                 animationType="slide"
                 transparent={true}
@@ -475,10 +641,32 @@ const Property = () => {
                                 <Text className="text-xl font-rubik-bold mb-4 text-center">Đặt lịch xem nhà</Text>
                                 
                                 <Text className="font-rubik-medium mb-2">Thời gian dự kiến:</Text>
-                                <View className="bg-gray-100 p-3 rounded-lg mb-4">
-                                     <Text className="text-black-300">Ngày mai, 9:00 AM</Text>
-                                     <Text className="text-xs text-gray-500 mt-1">(Người bán sẽ liên hệ để chốt giờ chính xác)</Text>
+                                <View className="bg-gray-100 p-3 rounded-lg mb-4 flex-row justify-between items-center">
+                                     <View>
+                                         <Text className="text-black-300 font-rubik-bold text-base">
+                                            {selectedDate.toLocaleDateString('vi-VN')}
+                                         </Text>
+                                         <Text className="text-primary-300 font-rubik-medium">
+                                            {selectedDate.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}
+                                         </Text>
+                                     </View>
+                                     <View className="flex-row gap-2">
+                                        <Button title="Ngày" onPress={() => showMode('date')} />
+                                        <Button title="Giờ" onPress={() => showMode('time')} />
+                                     </View>
                                 </View>
+                                
+                                {showDatePicker && (
+                                    <DateTimePicker
+                                        testID="dateTimePicker"
+                                        value={selectedDate}
+                                        mode={datePickerMode}
+                                        is24Hour={true}
+                                        display="default"
+                                        onChange={onChangeDate}
+                                        minimumDate={new Date()}
+                                    />
+                                )}
 
                                 <Text className="font-rubik-medium mb-2">Ghi chú cho người bán:</Text>
                                 <TextInput 
@@ -497,6 +685,92 @@ const Property = () => {
                         </KeyboardAvoidingView>
                     </View>
                 </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* Comparison Modal */}
+            <Modal
+                animationType="slide"
+                transparent={false}
+                visible={comparisonModalVisible}
+                onRequestClose={() => setComparisonModalVisible(false)}
+            >
+                <SafeAreaView className="flex-1 bg-white">
+                    <View className="px-5 py-4 flex-row items-center justify-between border-b border-gray-100"
+                          style={{ paddingTop: Platform.OS === 'ios' ? 0 : 10 }} // Adjust padding for Android
+                    >
+                        <Text className="text-xl font-rubik-bold text-black-300">So sánh Bất động sản</Text>
+                        <View className="flex-row gap-4">
+                            <TouchableOpacity onPress={clearCompare}>
+                                <Text className="text-primary-300 font-rubik-medium">Xóa hết</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => setComparisonModalVisible(false)}>
+                                <Text className="text-black-200 text-lg">✕</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                    
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View className="flex-row p-5 gap-5">
+                            {/* Labels Column */}
+                            <View className="w-24 pt-40 gap-8 mt-5">
+                                <Text className="font-rubik-medium text-black-200">Giá</Text>
+                                <Text className="font-rubik-medium text-black-200">Diện tích</Text>
+                                <Text className="font-rubik-medium text-black-200">Phòng ngủ</Text>
+                                <Text className="font-rubik-medium text-black-200">Phòng tắm</Text>
+                                <Text className="font-rubik-medium text-black-200">Loại hình</Text>
+                                <Text className="font-rubik-medium text-black-200">Địa chỉ</Text>
+                            </View>
+
+                            {/* Property Columns */}
+                            {compareList.map((item) => (
+                                <View key={item.$id} className="w-48 bg-gray-50 rounded-2xl p-4 shadow-sm border border-gray-100 relative">
+                                    <TouchableOpacity 
+                                        onPress={() => removeFromCompare(item.$id)}
+                                        className="absolute top-2 right-2 z-10 bg-white rounded-full p-1 shadow-sm"
+                                    >
+                                        <Text className="text-xs text-red-500 font-bold">✕</Text>
+                                    </TouchableOpacity>
+                                    
+                                    <Image source={{ uri: item.image }} className="w-full h-32 rounded-xl mb-3" />
+                                    <Text numberOfLines={2} className="font-rubik-bold text-black-300 mb-6 h-12 text-center">
+                                        {item.name}
+                                    </Text>
+                                    
+                                    <View className="gap-8">
+                                        <Text className="font-rubik-bold text-primary-300 text-center">
+                                            {item.price.toLocaleString()}
+                                        </Text>
+                                        <Text className="font-rubik-medium text-center">{item.area} m²</Text>
+                                        <Text className="font-rubik-medium text-center">{item.bedrooms}</Text>
+                                        <Text className="font-rubik-medium text-center">{item.bathrooms}</Text>
+                                        <Text className="font-rubik-medium text-center">{item.type}</Text>
+                                        <Text numberOfLines={3} className="font-rubik text-xs text-center h-12 text-gray-500">
+                                            {item.address}
+                                        </Text>
+                                    </View>
+                                    
+                                    <TouchableOpacity 
+                                        onPress={() => {
+                                            setComparisonModalVisible(false);
+                                            router.push(`/properties/${item.$id}`);
+                                        }}
+                                        className="mt-6 bg-primary-300 py-2 rounded-lg"
+                                    >
+                                        <Text className="text-white text-center font-rubik-bold text-xs">Xem chi tiết</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+
+                            {compareList.length < 2 && (
+                                <View className="w-48 bg-gray-100 rounded-2xl items-center justify-center border-2 border-dashed border-gray-300">
+                                    <Text className="text-gray-400 font-rubik text-center px-4">
+                                        Thêm BĐS khác để so sánh
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </ScrollView>
+                </SafeAreaView>
             </Modal>
         </View>
     );

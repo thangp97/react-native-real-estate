@@ -1,16 +1,23 @@
+// File: app/(root)/(tabs)/_layout.tsx
+
 import { Tabs, Redirect } from 'expo-router';
 import { useGlobalContext } from '@/lib/global-provider';
+import { Redirect, Tabs } from 'expo-router';
+import { ActivityIndicator, Text, View } from 'react-native';
+
+// Bạn có thể cài đặt và sử dụng thư viện icon này: npm install @expo/vector-icons
+import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, View, Text } from 'react-native';
 import { useEffect } from 'react';
 import { signOut } from '@/lib/appwrite';
-import { Ionicons } from '@expo/vector-icons'; 
+import { Ionicons } from '@expo/vector-icons';
 
 const SignOutAndRedirect = () => {
     const { refetch } = useGlobalContext();
     useEffect(() => {
         const performSignOut = async () => {
             await signOut();
-            await refetch({}); 
+            await refetch({});
         };
         performSignOut();
     }, []);
@@ -35,13 +42,13 @@ const TabsLayout = () => {
     }
 
     const ProfileTab = (
-        <Tabs.Screen 
-            name="profile" 
-            options={{ 
-                title: 'Hồ Sơ', 
-                headerShown: false, 
-                tabBarIcon: ({ color }) => <Ionicons name="person-circle-outline" size={24} color={color} /> 
-            }} 
+        <Tabs.Screen
+            name="profile"
+            options={{
+                title: 'Hồ Sơ',
+                headerShown: false,
+                tabBarIcon: ({ color }) => <Ionicons name="person-circle-outline" size={24} color={color} />
+            }}
         />
     );
 
@@ -49,9 +56,9 @@ const TabsLayout = () => {
         return (
             <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
                 <Tabs.Screen name="explore" options={{ title: 'Khám Phá', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="search" size={24} color={color} /> }} />
-                {/* **FIX: Đã xóa tab thông báo chung** */}
-                {ProfileTab}
-                
+                <Tabs.Screen name="saved" options={{ title: 'Đã lưu', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="heart" size={24} color={color} /> }} />
+                <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
+                {/* Ẩn các tab không liên quan */}
                 <Tabs.Screen name="index" options={{ href: null }} />
                 <Tabs.Screen name="my-properties" options={{ href: null }} />
                 <Tabs.Screen name="dashboard" options={{ href: null }} />
@@ -61,6 +68,7 @@ const TabsLayout = () => {
         );
     }
 
+    // Người Bán
     if (user.role === 'seller') {
         return (
             <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
@@ -72,17 +80,19 @@ const TabsLayout = () => {
                 <Tabs.Screen name="index" options={{ href: null }} />
                 <Tabs.Screen name="explore" options={{ href: null }} />
                 <Tabs.Screen name="dashboard" options={{ href: null }} />
+                <Tabs.Screen name="saved" options={{ href: null }} />
             </Tabs>
         );
     }
 
+    // Môi giới
     if (user.role === 'broker') {
         return (
             <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
-                <Tabs.Screen name="dashboard" options={{ title: 'Dashboard', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="briefcase-outline" size={24} color={color} /> }} />
-                {/* **FIX: Đã xóa tab thông báo chung** */}
-                {ProfileTab}
+                <Tabs.Screen name="dashboard" options={{ title: 'Dashboard', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="briefcase" size={24} color={color} /> }} />
+                <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
 
+                {/* Ẩn các tab không liên quan */}
                 <Tabs.Screen name="index" options={{ href: null }} />
                 <Tabs.Screen name="explore" options={{ href: null }} />
                 <Tabs.Screen name="my-properties" options={{ href: null }} />

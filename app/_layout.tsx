@@ -4,6 +4,7 @@ import "./global.css";
 import { useFonts} from "expo-font";
 import {useEffect} from "react";
 import GlobalProvider from "@/lib/global-provider";
+import { ComparisonProvider } from "@/lib/comparison-provider";
 
 export default function RootLayout() {
     const [fontsLoaded] = useFonts({
@@ -25,7 +26,9 @@ export default function RootLayout() {
 
   return (
       <GlobalProvider>
-          <Stack screenOptions={{headerShown: false}} />;
+        <ComparisonProvider>
+            <Stack screenOptions={{headerShown: false}} />
+        </ComparisonProvider>
       </GlobalProvider>
       )
 }

@@ -1,8 +1,8 @@
-import { View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useState } from 'react';
 import { useGlobalContext } from '@/lib/global-provider';
-import { getUserBookings } from '@/lib/appwrite';
+import { getUserBookings, cancelBooking } from '@/lib/appwrite';
 import { useRouter } from 'expo-router';
 import icons from '@/constants/icons';
 
@@ -28,6 +28,29 @@ const Bookings = () => {
     useEffect(() => {
         fetchBookings();
     }, [user]);
+
+    const handleCancelBooking = (bookingId: string) => {
+        Alert.alert(
+            "Hủy lịch hẹn",
+            "Bạn có chắc chắn muốn hủy lịch hẹn này không?",
+            [
+                { text: "Không", style: "cancel" },
+                {
+                    text: "Đồng ý",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await cancelBooking(bookingId);
+                            Alert.alert("Thành công", "Đã hủy lịch hẹn.");
+                            fetchBookings(); // Tải lại danh sách
+                        } catch (error) {
+                            Alert.alert("Lỗi", "Không thể hủy lịch hẹn. Vui lòng thử lại.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -79,39 +102,66 @@ const Bookings = () => {
                             <Text className="text-gray-500 text-lg">Bạn chưa có lịch hẹn nào.</Text>
                         </View>
                     }
-                    renderItem={({ item }) => (
-                        <TouchableOpacity 
-                            onPress={() => router.push(`/properties/${item.propertyId}`)}
-                            className="flex-row bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4"
-                        >
-                            <Image 
-                                source={{ uri: item.property?.image }} 
-                                className="w-24 h-24 rounded-lg bg-gray-200" 
-                                resizeMode="cover"
-                            />
-                            <View className="flex-1 ml-4 justify-between">
-                                <View>
-                                    <Text className="font-rubik-bold text-base text-black-300" numberOfLines={1}>
-                                        {item.property?.name || 'Bất động sản không tồn tại'}
-                                    </Text>
-                                    <Text className="text-gray-500 text-xs mt-1" numberOfLines={1}>
-                                        {item.property?.address}
-                                    </Text>
-                                </View>
-                                
-                                <View className="mt-2">
-                                    <Text className="text-primary-300 font-rubik-medium text-sm">
-                                        {formatDate(item.date)}
-                                    </Text>
-                                    <View className={`self-start px-2 py-1 rounded mt-1 ${getStatusColor(item.status).split(' ')[1]}`}>
-                                        <Text className={`text-xs font-bold ${getStatusColor(item.status).split(' ')[0]}`}>
-                                            {getStatusText(item.status)}
+                    renderItem={({ item }) => {
+                        const property = item.property || {};
+                        const propertyId = property.$id || item.propertyId;
+                        // Nếu property là object (relationship) thì lấy image, nếu không fallback
+                        const imageSource = property.image ? { uri: property.image } : icons.home; 
+                        const propertyName = property.name || 'Thông tin bất động sản không khả dụng';
+                        const propertyAddress = property.address || 'Địa chỉ không xác định';
+
+                        return (
+                            <View className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex-row">
+                                <TouchableOpacity 
+                                    onPress={() => propertyId && router.push(`/properties/${propertyId}`)}
+                                    disabled={!propertyId}
+                                    className="mr-4"
+                                >
+                                    <Image 
+                                        source={imageSource} 
+                                        className="w-24 h-24 rounded-lg bg-gray-200" 
+                                        resizeMode="cover"
+                                    />
+                                </TouchableOpacity>
+
+                                <View className="flex-1 justify-between">
+                                    <TouchableOpacity 
+                                        onPress={() => propertyId && router.push(`/properties/${propertyId}`)}
+                                        disabled={!propertyId}
+                                    >
+                                        <Text className="font-rubik-bold text-base text-black-300" numberOfLines={1}>
+                                            {propertyName}
                                         </Text>
+                                        <Text className="text-gray-500 text-xs mt-1" numberOfLines={1}>
+                                            {propertyAddress}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    
+                                    <View className="mt-2">
+                                        <Text className="text-primary-300 font-rubik-medium text-sm">
+                                            {formatDate(item.date)}
+                                        </Text>
+                                        <View className="flex-row items-center justify-between mt-2">
+                                            <View className={`self-start px-2 py-1 rounded ${getStatusColor(item.status).split(' ')[1]}`}>
+                                                <Text className={`text-xs font-bold ${getStatusColor(item.status).split(' ')[0]}`}>
+                                                    {getStatusText(item.status)}
+                                                </Text>
+                                            </View>
+                                            
+                                            {item.status === 'pending' && (
+                                                <TouchableOpacity 
+                                                    onPress={() => handleCancelBooking(item.$id)}
+                                                    className="bg-gray-100 px-3 py-1 rounded-full"
+                                                >
+                                                    <Text className="text-xs text-red-500 font-rubik-medium">Hủy</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
                                     </View>
                                 </View>
                             </View>
-                        </TouchableOpacity>
-                    )}
+                        );
+                    }}
                 />
             )}
         </SafeAreaView>

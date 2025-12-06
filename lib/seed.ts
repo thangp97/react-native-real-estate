@@ -174,6 +174,7 @@ async function seed() {
                     facilities: selectedFacilities,
                     image: image,
                     agent: assignedAgent.$id,
+                    seller: assignedAgent.$id, // Sử dụng relationship 'seller' mới
                     reviews: assignedReviews.map((review) => review.$id),
                     gallery: assignedGalleries.map((gallery) => gallery.$id),
                 }
