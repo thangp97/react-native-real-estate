@@ -11,6 +11,7 @@ export const config = {
     propertiesCollectionId: 'properties',
     bookingsCollectionId: 'bookings',
     notificationsCollectionId: 'notifications',
+    galleriesCollectionId: 'galleries',
 }
 
 export const client = new Client();
@@ -234,6 +235,16 @@ export async function getPropertyById({ id }) {
             };
         }
 
+        // --- Lấy các ảnh từ collection galleries ---
+        const galleryResult = await databases.listDocuments(
+            config.databaseId!,
+            config.galleriesCollectionId!,
+            [Query.equal('propertyId', id), Query.orderAsc('$createdAt')] // Sắp xếp theo thời gian tạo để có thứ tự nhất định
+        );
+
+        // Trích xuất URL ảnh và gán vào property.galleryImages
+        property.galleryImages = galleryResult.documents.map((doc) => doc.image);
+
         return property;
 
     } catch (error) {
@@ -347,13 +358,38 @@ export async function createBooking({ userId, agentId, propertyId, date, note })
 
 export async function cancelBooking(bookingId: string) {
     try {
+        // 1. Lấy document hiện tại để kiểm tra và sửa dữ liệu nếu cần
+        const doc = await databases.getDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            bookingId
+        );
+
+        // Helper để lấy ID an toàn từ string, object hoặc mảng
+        const getSafeId = (field: any) => {
+            if (!field) return null;
+            if (Array.isArray(field)) return field[0]?.$id || field[0]; // Lấy phần tử đầu nếu là mảng
+            if (typeof field === 'object' && field.$id) return field.$id; // Lấy $id nếu là object
+            return field; // Giữ nguyên nếu là string ID
+        };
+
+        const updates: any = {
+            status: 'cancelled',
+            // Cập nhật lại các trường relationship để đảm bảo chúng đúng định dạng (Single ID)
+            // Nếu DB đang lưu sai (Array), dòng này sẽ sửa lại thành String ID
+            property: getSafeId(doc.property),
+            user: getSafeId(doc.user),
+            agent: getSafeId(doc.agent)
+        };
+
+        // Loại bỏ các trường null/undefined khỏi updates
+        Object.keys(updates).forEach(key => updates[key] === null && delete updates[key]);
+
         const result = await databases.updateDocument(
             config.databaseId!,
             config.bookingsCollectionId!,
             bookingId,
-            {
-                status: 'cancelled'
-            }
+            updates
         );
         return result;
     } catch (error) {

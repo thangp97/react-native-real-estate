@@ -1,8 +1,8 @@
 // File: app/(root)/(tabs)/_layout.tsx
 
-import { Tabs, Redirect } from 'expo-router';
 import { useGlobalContext } from '@/lib/global-provider';
-import { ActivityIndicator, View, Text } from 'react-native';
+import { Redirect, Tabs } from 'expo-router';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 // Bạn có thể cài đặt và sử dụng thư viện icon này: npm install @expo/vector-icons
 import { Ionicons } from '@expo/vector-icons';
@@ -69,8 +69,6 @@ const TabsLayout = () => {
             </Tabs>
         );
     }
-
-    // Fallback phòng trường hợp role không xác định
     return <Text>Không thể xác định vai trò người dùng.</Text>;
 };
 
