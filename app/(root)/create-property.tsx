@@ -147,7 +147,8 @@ const CreateProperty = () => {
         setIsSubmitting(true);
         try {
             const data = {
-                sellerId: user!.$id,
+                // **FIX: Thay 'sellerId' bằng 'seller'**
+                seller: user!.$id,
                 name: form.name,
                 description: form.description,
                 price: parseInt(form.price),
@@ -204,7 +205,6 @@ const CreateProperty = () => {
                 <TextInput style={styles.input} placeholder="Ví dụ: Bán nhà mặt tiền Quận 1" value={form.name} onChangeText={(e) => setForm({ ...form, name: e })} />
                 
                 <Text style={styles.label}>Mô tả chi tiết</Text>
-                {/* **FIX: Áp dụng style mới cho ô mô tả** */}
                 <TextInput style={styles.textArea} placeholder="Mô tả về vị trí, tiện ích, nội thất..." value={form.description} onChangeText={(e) => setForm({ ...form, description: e })} multiline numberOfLines={4} />
                 
                 <Text style={styles.label}>Tỉnh / Thành phố</Text>
@@ -265,17 +265,7 @@ const styles = StyleSheet.create({
     title: { fontSize: 24, fontWeight: 'bold', marginLeft: 10 },
     label: { fontSize: 16, fontWeight: '500', marginBottom: 5, color: '#333' },
     input: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5, marginBottom: 15, fontSize: 16, height: 48, justifyContent: 'center' },
-    // **FIX: Style mới cho ô mô tả**
-    textArea: {
-        borderWidth: 1,
-        borderColor: '#ccc',
-        padding: 10,
-        borderRadius: 5,
-        marginBottom: 15,
-        fontSize: 16,
-        height: 120, // Chiều cao lớn hơn
-        textAlignVertical: 'top' // Căn chữ bắt đầu từ trên xuống
-    },
+    textArea: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5, marginBottom: 15, fontSize: 16, height: 120, textAlignVertical: 'top' },
     inputText: { fontSize: 16 },
     pickerButton: { backgroundColor: '#f0f0f0', padding: 15, borderRadius: 5, alignItems: 'center', marginBottom: 15 },
     pickerText: { fontSize: 16 },

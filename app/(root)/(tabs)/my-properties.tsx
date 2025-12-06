@@ -76,7 +76,7 @@ const MyProperties = () => {
         if (user?.$id) {
             refetch({ userId: user.$id });
         }
-    }, [user]);
+    }, [user?.$id]);
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
@@ -84,7 +84,6 @@ const MyProperties = () => {
                 data={properties as PropertyDocument[] | null}
                 keyExtractor={(item) => item.$id}
                 renderItem={({ item }) => (
-                    // **FIX: Trỏ đến file mới và truyền params**
                     <Link href={{ pathname: "/property-details", params: { id: item.$id } }} asChild>
                         <TouchableOpacity>
                             <PropertyCard item={item} />

@@ -10,7 +10,7 @@ import {
     StyleSheet,
     ActivityIndicator,
     Alert,
-    Modal, // **FIX: Import Modal**
+    Modal,
 } from "react-native";
 import { router, useLocalSearchParams, Link } from "expo-router";
 import { useEffect, useState } from "react";
@@ -21,6 +21,11 @@ import { useGlobalContext } from "@/lib/global-provider";
 import { useAppwrite } from "@/lib/useAppwrite";
 import { getPropertyById, getAgentById, getPropertyGallery, deleteProperty } from "@/lib/appwrite";
 import { Models } from "react-native-appwrite";
+
+const REGIONS = {
+    AnGiang: "An Giang", BaRiaVungTau: "Bà Rịa - Vũng Tàu", BacGiang: "Bắc Giang", BacKan: "Bắc Kạn", BacLieu: "Bạc Liêu", BacNinh: "Bắc Ninh", BenTre: "Bến Tre", BinhDinh: "Bình Định", BinhDuong: "Bình Dương", BinhPhuoc: "Bình Phước", BinhThuan: "Bình Thuận", CaMau: "Cà Mau", CanTho: "Cần Thơ", CaoBang: "Cao Bằng", DaNang: "Đà Nẵng", DakLak: "Đắk Lắk", DakNong: "Đắk Nông", DienBien: "Điện Biên", DongNai: "Đồng Nai", DongThap: "Đồng Tháp", GiaLai: "Gia Lai", HaGiang: "Hà Giang", HaNam: "Hà Nam", HaNoi: "Hà Nội", HaTinh: "Hà Tĩnh", HaiDuong: "Hải Dương", HaiPhong: "Hải Phòng", HauGiang: "Hậu Giang", HoaBinh: "Hòa Bình", HungYen: "Hưng Yên", KhanhHoa: "Khánh Hòa", KienGiang: "Kiên Giang", KonTum: "Kon Tum", LaiChau: "Lai Châu", LamDong: "Lâm Đồng", LangSon: "Lạng Sơn", LaoCai: "Lào Cai", LongAn: "Long An", NamDinh: "Nam Định", NgheAn: "Nghệ An", NinhBinh: "Ninh Bình", NinhThuan: "Ninh Thuận", PhuTho: "Phú Thọ", PhuYen: "Phú Yên", QuangBinh: "Quảng Bình", QuangNam: "Quảng Nam", QuangNgai: "Quảng Ngãi", QuangNinh: "Quảng Ninh", QuangTri: "Quảng Trị", SocTrang: "Sóc Trăng", SonLa: "Sơn La", TayNinh: "Tây Ninh", ThaiBinh: "Thái Bình", ThaiNguyen: "Thái Nguyên", ThanhHoa: "Thanh Hóa", ThuaThienHue: "Thừa Thiên Huế", TienGiang: "Tiền Giang", TPHCM: "TP. Hồ Chí Minh", TraVinh: "Trà Vinh", TuyenQuang: "Tuyên Quang", VinhLong: "Vĩnh Long", VinhPhuc: "Vĩnh Phúc", YenBai: "Yên Bái"
+};
+type RegionKey = keyof typeof REGIONS;
 
 type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';
 
@@ -67,7 +72,7 @@ const PropertyDetails = () => {
 
     const [agent, setAgent] = useState<Models.Document | null>(null);
     const [loadingAgent, setLoadingAgent] = useState(true);
-    const [selectedImage, setSelectedImage] = useState<string | null>(null); // **FIX: State cho ảnh được chọn**
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchAgent = async () => {
@@ -81,7 +86,7 @@ const PropertyDetails = () => {
             }
         };
         fetchAgent();
-    }, [property]);
+    }, [property?.brokerId]);
 
     const handleDelete = () => {
         Alert.alert("Xác nhận Xóa", "Bạn có chắc chắn muốn xóa bài đăng này không? Hành động này không thể hoàn tác.",
@@ -100,7 +105,8 @@ const PropertyDetails = () => {
         );
     };
 
-    const isOwner = user && property && user.$id === property.sellerId;
+    // **FIX: So sánh trực tiếp với property.seller vì nó là một chuỗi ID**
+    const isOwner = user && property && user.$id === property.seller;
     const canEditOrDelete = isOwner && property.status === 'pending_approval';
 
     if (loadingProperty || !property) {
@@ -119,7 +125,6 @@ const PropertyDetails = () => {
                             pagingEnabled
                             showsHorizontalScrollIndicator={false}
                             renderItem={({ item }) => (
-                                // **FIX: Bọc ảnh trong TouchableOpacity**
                                 <TouchableOpacity onPress={() => setSelectedImage(item.image)}>
                                     <Image source={{ uri: item.image }} style={{ width: width, height: '100%' }} resizeMode="cover" />
                                 </TouchableOpacity>
@@ -171,6 +176,11 @@ const PropertyDetails = () => {
                         <Text className="text-black-300 text-sm font-rubik-medium ml-2">{property.area} m²</Text>
                     </View>
 
+                    <View className="flex-row items-center mt-3">
+                        <View className="flex-row items-center justify-center bg-primary-100 rounded-full size-10"><Image source={icons.location} className="size-4" /></View>
+                        <Text className="text-black-300 text-sm font-rubik-medium ml-2">{REGIONS[property.region as RegionKey] || property.region}</Text>
+                    </View>
+
                     <View className="mt-7">
                         <Text className="text-black-300 text-xl font-rubik-bold">Tổng quan</Text>
                         <Text className="text-black-200 text-base font-rubik mt-2 leading-relaxed">{property.description}</Text>
@@ -199,23 +209,9 @@ const PropertyDetails = () => {
                 </View>
             </ScrollView>
 
-            {/* **FIX: Modal để hiển thị ảnh full-screen** */}
-            <Modal
-                visible={!!selectedImage}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setSelectedImage(null)}
-            >
-                <TouchableOpacity 
-                    style={styles.modalContainer} 
-                    activeOpacity={1} 
-                    onPress={() => setSelectedImage(null)}
-                >
-                    <Image 
-                        source={{ uri: selectedImage! }} 
-                        style={styles.fullscreenImage} 
-                        resizeMode="contain" 
-                    />
+            <Modal visible={!!selectedImage} transparent={true} animationType="fade" onRequestClose={() => setSelectedImage(null)}>
+                <TouchableOpacity style={styles.modalContainer} activeOpacity={1} onPress={() => setSelectedImage(null)}>
+                    <Image source={{ uri: selectedImage! }} style={styles.fullscreenImage} resizeMode="contain" />
                 </TouchableOpacity>
             </Modal>
         </SafeAreaView>
@@ -231,17 +227,8 @@ const styles = StyleSheet.create({
     deleteButton: { backgroundColor: '#FFEEEE' },
     deleteButtonText: { color: '#d9534f' },
     priceText: { fontSize: 22, fontWeight: 'bold', color: '#007BFF', marginTop: 4 },
-    // Styles cho Modal xem ảnh
-    modalContainer: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    fullscreenImage: {
-        width: '100%',
-        height: '100%',
-    },
+    modalContainer: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.85)', justifyContent: 'center', alignItems: 'center' },
+    fullscreenImage: { width: '100%', height: '100%' },
 });
 
 export default PropertyDetails;
