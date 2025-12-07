@@ -58,12 +58,12 @@ export const featuredCards = [
 export const categories = [
   { title: "Tất cả", category: "All" },
   { title: "Nhà", category: "House" },
-  { title: "Căn hộ chung cư", category: "Condos" },
-  { title: "Nhà song lập", category: "Duplexes" },
-  { title: "Căn hộ studio", category: "Studios" },
+  { title: "Căn hộ chung cư", category: "Condo" },
+  { title: "Nhà song lập", category: "Duplex" },
+  { title: "Căn hộ studio", category: "Studio" },
   { title: "Biệt thự", category: "Villa" },
-  { title: "Căn hộ", category: "Apartments" },
-  { title: "Nhà liền kề", category: "Townhomes" },
+  { title: "Căn hộ", category: "Apartment" },
+  { title: "Nhà liền kề", category: "Townhouse" },
   { title: "Khác", category: "Others" },
 ];
 

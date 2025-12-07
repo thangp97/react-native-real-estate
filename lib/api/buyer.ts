@@ -15,12 +15,16 @@ export async function getLatestProperties() {
     }
 }
 
-export async function getProperties({filter, query, limit, minPrice, maxPrice, bedrooms, area}: any) {
+export async function getProperties({filter, query, limit, minPrice, maxPrice, bedrooms, area, region}: any) {
     try {
         const buildQuery = [Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved'), Query.equal('status', 'sold')]), Query.orderDesc('$createdAt')];
 
         if (filter && filter !== 'All') {
             buildQuery.push(Query.equal('type', filter));
+        }
+
+        if (region && region !== 'All') {
+             buildQuery.push(Query.equal('region', region));
         }
 
         if (query) {
@@ -83,19 +87,23 @@ export async function getPropertyById({ id }: { id: string }) {
             config.databaseId!,
             config.propertiesCollectionId!,
             id,
-            [Query.select(['*', 'seller.name', 'seller.email', 'seller.avatar'])] // Yêu cầu trả về các trường của seller
+            // Corrected: Fetch brokerId info instead of assignedBroker
+            [Query.select(['*', 'brokerId.name', 'brokerId.email', 'brokerId.avatar'])] 
         );
 
         if (!property) return null;
 
-        // Gán thông tin seller vào property.agent để frontend không cần thay đổi nhiều
-        if (property.seller) {
+        // Corrected: Map brokerId to property.agent
+        if (property.brokerId) {
+            const brokerData = typeof property.brokerId === 'object' ? property.brokerId : null;
             property.agent = {
-                name: property.seller.name,
-                email: property.seller.email,
-                avatar: property.seller.avatar,
-                // Thêm các trường khác của seller nếu cần thiết cho frontend
+                $id: brokerData?.$id || property.brokerId, // Lấy ID của broker
+                name: brokerData?.name || 'N/A', // Tên broker
+                email: brokerData?.email || 'N/A', // Email broker
+                avatar: brokerData?.avatar || null, // Avatar broker
             };
+        } else {
+            property.agent = null; // Không có broker
         }
 
         // --- Lấy các ảnh từ collection galleries ---

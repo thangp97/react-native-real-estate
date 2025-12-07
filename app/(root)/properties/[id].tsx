@@ -289,7 +289,11 @@ const Property = () => {
              return;
         }
 
-        const targetAgentId = property?.brokerId || DEFAULT_BROKER_ID;
+        // Kiểm tra xem brokerId là object hay string để lấy ID chính xác
+        let targetAgentId = DEFAULT_BROKER_ID;
+        if (property?.brokerId) {
+            targetAgentId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
+        }
 
         setIsBooking(true);
         try {
