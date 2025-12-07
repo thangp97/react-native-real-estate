@@ -1,5 +1,5 @@
-import {Account, Avatars, Client, Databases, ID, Storage, OAuthProvider} from "react-native-appwrite";
 import * as Linking from 'expo-linking';
+import { Account, Avatars, Client, Databases, ID, OAuthProvider, Storage } from "react-native-appwrite";
 
 export const config = {
     endpoint: process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT,
@@ -8,7 +8,7 @@ export const config = {
     databaseId: process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID,
     storageId: process.env.EXPO_PUBLIC_APPWRITE_STORAGE_ID,
     profilesCollectionId: 'profiles',
-    agentsCollectionId: 'agents', // Thêm collection Agents
+    agentsCollectionId: 'agents',
     propertiesCollectionId: 'properties',
     galleriesCollectionId: 'galleries',
     bookingsCollectionId: 'bookings',

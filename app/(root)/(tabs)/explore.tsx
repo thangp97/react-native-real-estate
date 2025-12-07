@@ -8,9 +8,10 @@ import {
     Modal,
     TextInput,
     TouchableWithoutFeedback,
-    Keyboard
+    Keyboard,
+    ScrollView
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import icons from "@/constants/icons";
 import Search from "@/components/Search";
@@ -21,30 +22,51 @@ import { getProperties } from "@/lib/api/buyer";
 import { useEffect, useState } from "react";
 import NoResults from "@/components/NoResults";
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import { useFilterContext } from "@/lib/filter-provider";
 
 export default function Explore() {
-    const params = useLocalSearchParams<{ query?: string; filter?: string; }>();
+    const { 
+        minPrice, setMinPrice,
+        maxPrice, setMaxPrice,
+        bedrooms, setBedrooms,
+        area, setArea,
+        region, setRegion,
+        filter,
+        query,
+        resetFilters
+    } = useFilterContext();
     
-    // State cho bộ lọc nâng cao
     const [modalVisible, setModalVisible] = useState(false);
-    const [minPrice, setMinPrice] = useState('');
-    const [maxPrice, setMaxPrice] = useState('');
-    const [bedrooms, setBedrooms] = useState('');
-    const [area, setArea] = useState('');
+    
+    const [tempMinPrice, setTempMinPrice] = useState(minPrice);
+    const [tempMaxPrice, setTempMaxPrice] = useState(maxPrice);
+    const [tempBedrooms, setTempBedrooms] = useState(bedrooms);
+    const [tempArea, setTempArea] = useState(area);
+    const [tempRegion, setTempRegion] = useState(region);
 
-    // State cho chế độ xem (List vs Map)
+    const cities = [
+        { label: 'Toàn quốc', value: 'All' },
+        { label: 'Hồ Chí Minh', value: 'TPHCM' },
+        { label: 'Hà Nội', value: 'HaNoi' },
+        { label: 'Đà Nẵng', value: 'DaNang' },
+        { label: 'Bình Dương', value: 'BinhDuong' },
+        { label: 'Đồng Nai', value: 'DongNai' },
+        { label: 'Cần Thơ', value: 'CanTho' },
+    ];
+
     const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
     const { data: properties, loading, refetch } = useAppwrite({
         fn: getProperties,
         params: {
-            filter: params.filter!,
-            query: params.query!,
+            filter: filter,
+            query: query,
             limit: 20,
             minPrice: minPrice,
             maxPrice: maxPrice,
             bedrooms: bedrooms,
-            area: area
+            area: area,
+            region: region
         },
         skip: true,
     })
@@ -53,54 +75,54 @@ export default function Explore() {
 
     useEffect(() => {
         refetch({
-            filter: params.filter!,
-            query: params.query!,
+            filter: filter,
+            query: query,
             limit: 20,
             minPrice: minPrice,
             maxPrice: maxPrice,
             bedrooms: bedrooms,
-            area: area
+            area: area,
+            region: region
         })
-    }, [params.filter, params.query]);
+    }, [filter, query, minPrice, maxPrice, bedrooms, area, region]);
+
+    useEffect(() => {
+        if (modalVisible) {
+            setTempMinPrice(minPrice);
+            setTempMaxPrice(maxPrice);
+            setTempBedrooms(bedrooms);
+            setTempArea(area);
+            setTempRegion(region);
+        }
+    }, [modalVisible, minPrice, maxPrice, bedrooms, area, region]);
 
     const handleApplyFilters = () => {
-        refetch({
-            filter: params.filter!,
-            query: params.query!,
-            limit: 20,
-            minPrice: minPrice,
-            maxPrice: maxPrice,
-            bedrooms: bedrooms,
-            area: area
-        });
+        setMinPrice(tempMinPrice);
+        setMaxPrice(tempMaxPrice);
+        setBedrooms(tempBedrooms);
+        setArea(tempArea);
+        setRegion(tempRegion);
         setModalVisible(false);
     };
 
     const handleResetFilters = () => {
-        setMinPrice('');
-        setMaxPrice('');
-        setBedrooms('');
-        setArea('');
-        refetch({
-            filter: params.filter!,
-            query: params.query!,
-            limit: 20,
-            minPrice: '',
-            maxPrice: '',
-            bedrooms: '',
-            area: ''
-        });
+        setTempMinPrice('');
+        setTempMaxPrice('');
+        setTempBedrooms('');
+        setTempArea('');
+        setTempRegion('All');
+        resetFilters();
         setModalVisible(false);
     };
 
     const renderHeader = () => (
-        <View className={"px-5 pb-2"}>
-            <View className={"flex flex-row items-center justify-between mt-5"}>
-                <Text className={"text-base mr-2 text-center font-rubik-medium text-black-300"}>
+        <View className="px-5 pb-2">
+            <View className="flex flex-row items-center justify-between mt-5">
+                <Text className="text-base mr-2 text-center font-rubik-medium text-black-300">
                     Tìm kiếm ngôi nhà lý tưởng
                 </Text>
                 <TouchableOpacity onPress={() => router.push('/notifications')}>
-                    <Image source={icons.bell} className={"w-6 h-6"} />
+                    <Image source={icons.bell} className="w-6 h-6" />
                 </TouchableOpacity>
             </View>
             
@@ -127,9 +149,9 @@ export default function Explore() {
                 </TouchableOpacity>
             </View>
 
-            <View className={"mt-5"}>
+            <View className="mt-5">
                 <Filters />
-                <Text className={"text-xl font-rubik-bold text-black-300 mt-5"}>
+                <Text className="text-xl font-rubik-bold text-black-300 mt-5">
                     {`Tìm thấy ${properties?.length || 0} bất động sản`}
                 </Text>
             </View>
@@ -137,7 +159,7 @@ export default function Explore() {
     );
 
     return (
-        <SafeAreaView className={"bg-white h-full"}>
+        <SafeAreaView className="bg-white h-full">
             {renderHeader()}
 
             {viewMode === 'list' ? (
@@ -146,12 +168,12 @@ export default function Explore() {
                     renderItem={({ item }) => <Card item={item} onPress={() => handleCardPress(item.$id)} />}
                     keyExtractor={(item) => item.$id}
                     numColumns={2}
-                    contentContainerClassName={"pb-32"}
-                    columnWrapperClassName={"flex gap-5 px-5"}
+                    contentContainerClassName="pb-32"
+                    columnWrapperClassName="flex gap-5 px-5"
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
                         loading ? (
-                            <ActivityIndicator size={"large"} className={"text-primary-300 mt-5"} />
+                            <ActivityIndicator size="large" className="text-primary-300 mt-5" />
                         ) : <NoResults />
                     }
                 />
@@ -172,9 +194,7 @@ export default function Explore() {
                                 }}
                             >
                                 {properties?.map((item) => {
-                                    // Generate consistent fake coordinates based on ID
                                     const idNum = item.$id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-                                    // Jitter around HCMC (10.76, 106.66)
                                     const lat = 10.762622 + (idNum % 100 - 50) / 1500;
                                     const lng = 106.660172 + (idNum % 70 - 35) / 1500;
                                     
@@ -220,21 +240,46 @@ export default function Explore() {
 
                             <View className="space-y-4">
                                 <View>
+                                    <Text className="text-base font-rubik-medium mb-2">Khu vực / Thành phố</Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                        <View className="flex-row gap-2">
+                                            {cities.map((city) => (
+                                                <TouchableOpacity
+                                                    key={city.value}
+                                                    onPress={() => setTempRegion(city.value)}
+                                                    className={`px-4 py-2 rounded-full border ${
+                                                        tempRegion === city.value 
+                                                            ? 'bg-primary-300 border-primary-300' 
+                                                            : 'bg-white border-primary-200'
+                                                    }`}
+                                                >
+                                                    <Text className={`font-rubik-medium ${
+                                                        tempRegion === city.value ? 'text-white' : 'text-black-300'
+                                                    }`}>
+                                                        {city.label}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    </ScrollView>
+                                </View>
+
+                                <View>
                                     <Text className="text-base font-rubik-medium mb-2">Khoảng giá (VNĐ)</Text>
                                     <View className="flex-row gap-3">
                                         <TextInput
                                             className="flex-1 bg-gray-100 p-3 rounded-xl font-rubik"
                                             placeholder="Tối thiểu"
                                             keyboardType="numeric"
-                                            value={minPrice}
-                                            onChangeText={setMinPrice}
+                                            value={tempMinPrice}
+                                            onChangeText={setTempMinPrice}
                                         />
                                         <TextInput
                                             className="flex-1 bg-gray-100 p-3 rounded-xl font-rubik"
                                             placeholder="Tối đa"
                                             keyboardType="numeric"
-                                            value={maxPrice}
-                                            onChangeText={setMaxPrice}
+                                            value={tempMaxPrice}
+                                            onChangeText={setTempMaxPrice}
                                         />
                                     </View>
                                 </View>
@@ -242,22 +287,22 @@ export default function Explore() {
                                 <View className="mt-4">
                                     <Text className="text-base font-rubik-medium mb-2">Số phòng ngủ (tối thiểu)</Text>
                                     <TextInput
-                                        className="bg-gray-100 p-3 rounded-xl font-rubik"
+                                        className="flex-1 bg-gray-100 p-3 rounded-xl font-rubik"
                                         placeholder="Nhập số phòng ngủ"
                                         keyboardType="numeric"
-                                        value={bedrooms}
-                                        onChangeText={setBedrooms}
+                                        value={tempBedrooms}
+                                        onChangeText={setTempBedrooms}
                                     />
                                 </View>
 
                                 <View className="mt-4">
                                     <Text className="text-base font-rubik-medium mb-2">Diện tích (m² tối thiểu)</Text>
                                     <TextInput
-                                        className="bg-gray-100 p-3 rounded-xl font-rubik"
+                                        className="flex-1 bg-gray-100 p-3 rounded-xl font-rubik"
                                         placeholder="Nhập diện tích"
                                         keyboardType="numeric"
-                                        value={area}
-                                        onChangeText={setArea}
+                                        value={tempArea}
+                                        onChangeText={setTempArea}
                                     />
                                 </View>
                             </View>
@@ -280,7 +325,6 @@ export default function Explore() {
                     </View>
                 </TouchableWithoutFeedback>
             </Modal>
-
         </SafeAreaView>
     );
 }

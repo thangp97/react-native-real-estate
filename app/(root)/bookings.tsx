@@ -1,10 +1,10 @@
-import { View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useEffect, useState } from 'react';
-import { useGlobalContext } from '@/lib/global-provider';
-import { getUserBookings, cancelBooking } from '@/lib/api/buyer';
-import { useRouter } from 'expo-router';
 import icons from '@/constants/icons';
+import { cancelBooking, getBuyerBookings } from '@/lib/api/buyer';
+import { useGlobalContext } from '@/lib/global-provider';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Image, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Bookings = () => {
     const { user } = useGlobalContext();
@@ -16,7 +16,7 @@ const Bookings = () => {
         if (!user) return;
         setLoading(true);
         try {
-            const data = await getUserBookings(user.$id);
+            const data = await getBuyerBookings(user.$id);
             setBookings(data);
         } catch (error) {
             console.error("Lỗi tải lịch hẹn:", error);
