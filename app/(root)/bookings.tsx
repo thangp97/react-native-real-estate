@@ -1,12 +1,12 @@
-import { View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useEffect, useState } from 'react';
 import { useGlobalContext } from '@/lib/global-provider';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Image, RefreshControl, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getUserBookings, cancelBooking } from '@/lib/api/buyer';
-import { getBrokerBookings, confirmBooking, rejectBooking } from '@/lib/api/broker';
+import { confirmBooking, getBrokerBookings, rejectBooking } from '@/lib/api/broker';
+import { cancelBooking, getBuyerBookings } from '@/lib/api/buyer';
 
 const BookingsScreen = () => {
     const { user } = useGlobalContext();

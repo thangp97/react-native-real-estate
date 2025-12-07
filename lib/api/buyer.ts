@@ -1,6 +1,5 @@
-import { databases, config } from "../appwrite";
-import { Query, ID } from "react-native-appwrite";
-import { updateUserProfile } from "../appwrite";
+import { ID, Query } from "react-native-appwrite";
+import { config, databases, updateUserProfile } from "../appwrite";
 
 export async function getLatestProperties() {
     try {
@@ -220,7 +219,7 @@ export async function cancelBooking(bookingId: string) {
     }
 }
 
-export async function getUserBookings(userId: string) {
+export async function getBuyerBookings(userId: string) {
     try {
         const result = await databases.listDocuments(
             config.databaseId!,
