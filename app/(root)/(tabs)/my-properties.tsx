@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalContext } from '@/lib/global-provider';
 import { useAppwrite } from '@/lib/useAppwrite';
 import { getUserProperties } from '@/lib/api/seller';
 import { Models } from 'react-native-appwrite';
 
-type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';
+type PropertyStatus = 'pending_approval' | 'approved' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';
 
 interface PropertyDocument extends Models.Document {
     name: string;
@@ -19,6 +19,7 @@ interface PropertyDocument extends Models.Document {
 const formatStatus = (status: PropertyStatus) => {
     const statuses: Record<PropertyStatus, string> = {
         'pending_approval': 'Chờ duyệt',
+        'approved': 'Đã duyệt',
         'for_sale': 'Đang bán',
         'deposit_paid': 'Đã cọc',
         'sold': 'Đã bán',
@@ -55,7 +56,7 @@ const PropertyCard = ({ item }: { item: PropertyDocument }) => (
 
 const MyProperties = () => {
     const { user } = useGlobalContext();
-    
+
     const { data: properties, refetch, loading } = useAppwrite({
         fn: getUserProperties,
         params: { userId: user?.$id },
@@ -70,6 +71,11 @@ const MyProperties = () => {
             await refetch({ userId: user.$id });
         }
         setRefreshing(false);
+    };
+
+    // Luôn cho phép tạo bài đăng mới trong môi trường dev
+    const handleCreatePress = () => {
+        router.push('/create-property');
     };
 
     useEffect(() => {
@@ -93,11 +99,9 @@ const MyProperties = () => {
                 ListHeaderComponent={() => (
                     <View style={styles.header}>
                         <Text style={styles.headerTitle}>Bất động sản của tôi</Text>
-                        <Link href="/create-property" asChild>
-                            <TouchableOpacity style={styles.createButton}>
-                                <Text style={styles.createButtonText}>+ Đăng tin mới</Text>
-                            </TouchableOpacity>
-                        </Link>
+                        <TouchableOpacity style={styles.createButton} onPress={handleCreatePress}>
+                            <Text style={styles.createButtonText}>+ Đăng tin mới</Text>
+                        </TouchableOpacity>
                     </View>
                 )}
                 ListEmptyComponent={() => (
@@ -119,48 +123,48 @@ const MyProperties = () => {
 };
 
 const styles = StyleSheet.create({
-    header: { 
-        paddingHorizontal: 16, 
-        paddingVertical: 20, 
-        borderBottomWidth: 1, 
+    header: {
+        paddingHorizontal: 16,
+        paddingVertical: 20,
+        borderBottomWidth: 1,
         borderBottomColor: '#eee',
         backgroundColor: '#fff'
     },
-    headerTitle: { 
-        fontSize: 28, 
-        fontWeight: 'bold' 
+    headerTitle: {
+        fontSize: 28,
+        fontWeight: 'bold'
     },
-    createButton: { 
-        backgroundColor: '#007BFF', 
-        padding: 12, 
-        borderRadius: 8, 
-        alignItems: 'center', 
-        marginTop: 15 
+    createButton: {
+        backgroundColor: '#007BFF',
+        padding: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        marginTop: 15
     },
-    createButtonText: { 
-        color: '#fff', 
-        fontSize: 16, 
-        fontWeight: 'bold' 
+    createButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold'
     },
-    emptyContainer: { 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        marginTop: 150 
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 150
     },
-    emptyText: { 
-        fontSize: 16, 
-        color: '#6c757d' 
+    emptyText: {
+        fontSize: 16,
+        color: '#6c757d'
     },
-    card: { 
-        backgroundColor: 'white', 
-        marginVertical: 8, 
-        marginHorizontal: 16, 
-        borderRadius: 10, 
-        shadowColor: '#000', 
-        shadowOffset: { width: 0, height: 1 }, 
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
+    card: {
+        backgroundColor: 'white',
+        marginVertical: 8,
+        marginHorizontal: 16,
+        borderRadius: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
         elevation: 3,
         flexDirection: 'row',
         overflow: 'hidden'
@@ -173,26 +177,26 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 12,
     },
-    cardTitle: { 
-        fontSize: 16, 
-        fontWeight: 'bold', 
-        marginBottom: 4 
+    cardTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 4
     },
     cardPrice: {
         fontSize: 14,
         color: '#007BFF',
         marginBottom: 8,
     },
-    statusBadge: { 
-        paddingHorizontal: 10, 
-        paddingVertical: 4, 
-        borderRadius: 15, 
-        alignSelf: 'flex-start', 
+    statusBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 15,
+        alignSelf: 'flex-start',
     },
-    statusText: { 
-        color: 'white', 
-        fontWeight: 'bold', 
-        fontSize: 12 
+    statusText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 12
     }
 });
 

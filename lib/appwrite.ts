@@ -1,4 +1,4 @@
-import {Account, Avatars, Client, Databases, ID, Storage, OAuthProvider} from "react-native-appwrite";
+import {Account, Avatars, Client, Databases, ID, Storage, OAuthProvider, AppwriteException} from "react-native-appwrite";
 import * as Linking from 'expo-linking';
 
 export const config = {
@@ -27,16 +27,53 @@ export const avatar = new Avatars(client);
 export const databases = new Databases(client);
 export const storage = new Storage(client);
 
-export async function createUser(email: string, password, username: string, role: string) {
+export async function createUser(email: string, password: string, username: string, role: string) {
+    let newAccount;
     try {
-        const newAccount = await account.create(ID.unique(), email, password, username);
-        if (!newAccount) throw Error("Không thể tạo tài khoản");
-        return await databases.createDocument(config.databaseId!, config.profilesCollectionId!, newAccount.$id, { role: role });
+        newAccount = await account.create(ID.unique(), email, password, username);
     } catch (error: any) {
-        console.log("Lỗi createUser:", error);
-        throw new Error(error.message);
+        console.error("Lỗi khi tạo tài khoản Appwrite:", error);
+        if (error instanceof AppwriteException) {
+            if (error.code === 409) {
+                throw new Error("Email này đã được sử dụng. Vui lòng chọn email khác.");
+            } else if (error.code === 400) {
+                if (error.message.includes('Password')) {
+                    throw new Error("Mật khẩu phải có ít nhất 8 ký tự.");
+                }
+            }
+        }
+        throw new Error("Không thể tạo tài khoản. Vui lòng thử lại.");
+    }
+
+    if (!newAccount) throw new Error("Không thể tạo tài khoản, không có phản hồi từ máy chủ.");
+
+    try {
+        await account.createEmailPasswordSession(email, password);
+    } catch (error) {
+        console.error("Lỗi khi tạo session sau khi đăng ký:", error);
+    }
+    
+    // DEV ONLY: Tạm thời vô hiệu hóa việc gửi email xác thực
+    // try {
+    //     await account.createVerification(Linking.createURL('/verification'));
+    // } catch (error) {
+    //     console.error("Lỗi khi gửi email xác thực:", error);
+    // }
+
+    try {
+        const profile = await databases.createDocument(
+            config.databaseId!, 
+            config.profilesCollectionId!, 
+            newAccount.$id, 
+            { role: role, name: username, email: email }
+        );
+        return profile;
+    } catch (error: any) {
+        console.error("Lỗi khi tạo document profile:", error);
+        throw new Error(`Không thể tạo hồ sơ người dùng: ${error.message}`);
     }
 }
+
 
 export async function signIn(email: string, password) {
     try {
@@ -44,7 +81,12 @@ export async function signIn(email: string, password) {
         return await account.createEmailPasswordSession(email, password);
     } catch (error: any) {
         console.log("Lỗi signIn:", error);
-        throw new Error(error.message);
+        if (error instanceof AppwriteException) {
+            if (error.code === 401) {
+                throw new Error("Email hoặc mật khẩu không chính xác.");
+            }
+        }
+        throw new Error("Đã có lỗi xảy ra khi đăng nhập.");
     }
 }
 
@@ -62,24 +104,23 @@ export async function getCurrentUser() {
     try {
         const currentAccount = await account.get();
         if (!currentAccount) return null;
+
         const userProfile = await databases.getDocument(config.databaseId!, config.profilesCollectionId!, currentAccount.$id);
-        return { ...currentAccount, ...userProfile };
+        
+        return { 
+            ...currentAccount, 
+            role: userProfile.role,
+            avatar: userProfile.avatar,
+        };
+
     } catch (error: any) {
-        if (error.code === 404) {
-            try {
-                console.log("Không tìm thấy profile, đang tự động tạo...");
-                const currentAccount = await account.get();
-                if(!currentAccount) return null;
-                const newProfile = await databases.createDocument(config.databaseId!, config.profilesCollectionId!, currentAccount.$id, { role: 'buyer' });
-                return { ...currentAccount, ...newProfile };
-            } catch (createError) {
-                console.error("Lỗi khi đang tự tạo profile:", createError);
-                return null;
-            }
+        if (error.code !== 401) {
+             console.log("Lỗi getCurrentUser:", error);
         }
         return null;
     }
 }
+
 
 export async function signOut() {
     try {
@@ -129,3 +170,4 @@ export async function uploadFile(file: any) {
         throw error;
     }
 }
+

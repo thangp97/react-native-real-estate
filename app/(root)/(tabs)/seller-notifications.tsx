@@ -1,138 +1,144 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link } from 'expo-router';
-import icons from '@/constants/icons';
-import { useGlobalContext } from '@/lib/global-provider';
-import { useAppwrite } from '@/lib/useAppwrite';
-import { getUserNotifications } from '@/lib/api/buyer';
-import { Models } from 'react-native-appwrite';
-import { formatDistanceToNow } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
-// **FIX: Định nghĩa kiểu cho document thông báo**
-interface NotificationDocument extends Models.Document {
-    message: string;
-    type: string;
-    relatedPropertyId?: string;
-}
-
-const NotificationItem = ({ item }: { item: NotificationDocument }) => {
-    let icon;
-    switch (item.type) {
-        case 'status_update':
-            icon = icons.checkmark;
-            break;
-        case 'new_request':
-            icon = icons.chat;
-            break;
-        default:
-            icon = icons.info;
-    }
-
-    // Định dạng thời gian
-    const timeAgo = formatDistanceToNow(new Date(item.$createdAt), { addSuffix: true, locale: vi });
-
-    return (
-        // **FIX: Bọc trong Link để có thể điều hướng**
-        <Link href={item.relatedPropertyId ? `/property-details?id=${item.relatedPropertyId}` : '#'} asChild>
-            <TouchableOpacity style={styles.itemContainer}>
-                <View style={styles.iconContainer}>
-                    {icon && <Image source={icon} style={styles.icon} resizeMode="contain" />}
-                </View>
-                <View style={styles.textContainer}>
-                    <Text style={styles.message}>{item.message}</Text>
-                    <Text style={styles.time}>{timeAgo}</Text>
-                </View>
-            </TouchableOpacity>
-        </Link>
-    );
-};
+// Dữ liệu giả cho thông báo
+const mockNotifications = [
+  {
+    id: '1',
+    type: 'approval',
+    message: 'Nhà môi giới Nguyễn Văn A đã duyệt bài đăng "Biệt thự ven hồ" của bạn.',
+    broker: {
+      id: 'broker1',
+      name: 'Nguyễn Văn A',
+      avatar: 'https://randomuser.me/api/portraits/men/1.jpg',
+    },
+    timestamp: '2 giờ trước',
+  },
+  {
+    id: '2',
+    type: 'rejection',
+    message: 'Bài đăng "Căn hộ trung tâm" của bạn đã bị từ chối. Lý do: Thiếu thông tin pháp lý.',
+    timestamp: '5 giờ trước',
+  },
+  {
+    id: '3',
+    type: 'approval',
+    message: 'Nhà môi giới Trần Thị B đã duyệt bài đăng "Đất nền dự án" của bạn.',
+    broker: {
+      id: 'broker2',
+      name: 'Trần Thị B',
+      avatar: 'https://randomuser.me/api/portraits/women/2.jpg',
+    },
+    timestamp: '1 ngày trước',
+  },
+];
 
 const SellerNotifications = () => {
-    const { user } = useGlobalContext();
-    
-    // **FIX: Sử dụng useAppwrite để lấy dữ liệu thật**
-    const { data: notifications, loading, refetch } = useAppwrite({
-        fn: getUserNotifications,
-        params: { userId: user?.$id },
-        skip: !user?.$id
-    });
+  const renderNotification = ({ item }: { item: typeof mockNotifications[0] }) => (
+    <View style={styles.notificationItem}>
+      <View style={styles.notificationContent}>
+        {item.broker && <Image source={{ uri: item.broker.avatar }} style={styles.avatar} />}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.message}>{item.message}</Text>
+          <Text style={styles.timestamp}>{item.timestamp}</Text>
+        </View>
+      </View>
+      {item.type === 'approval' && (
+        <TouchableOpacity
+          style={styles.chatButton}
+          onPress={() => router.push({ pathname: '/seller-chat', params: { brokerId: item.broker?.id } })}
+        >
+          <Ionicons name="chatbubbles-outline" size={24} color="#007BFF" />
+          <Text style={styles.chatButtonText}>Trò chuyện</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Thông báo</Text>
-            </View>
-
-            {/* **FIX: Xử lý trạng thái loading** */}
-            {loading && !notifications?.length ? (
-                <ActivityIndicator size="large" style={{ marginTop: 50 }} />
-            ) : (
-                <FlatList
-                    data={notifications as NotificationDocument[] | null}
-                    keyExtractor={(item) => item.$id}
-                    renderItem={({ item }) => <NotificationItem item={item} />}
-                    ListEmptyComponent={() => (
-                        <View style={styles.emptyContainer}>
-                            <Text>Chưa có thông báo nào.</Text>
-                        </View>
-                    )}
-                    onRefresh={() => refetch({ userId: user?.$id })}
-                    refreshing={loading}
-                />
-            )}
-        </SafeAreaView>
-    );
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Thông báo</Text>
+      </View>
+      <FlatList
+        data={mockNotifications}
+        renderItem={renderNotification}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+        ListEmptyComponent={<Text style={styles.emptyText}>Không có thông báo nào.</Text>}
+      />
+    </SafeAreaView>
+  );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-    },
-    title: {
-        fontSize: 22,
-        fontWeight: 'bold',
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 50,
-    },
-    itemContainer: {
-        flexDirection: 'row',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-        alignItems: 'center',
-        backgroundColor: 'white'
-    },
-    iconContainer: {
-        marginRight: 16,
-        width: 24, // Đảm bảo icon có không gian
-    },
-    icon: {
-        width: 24,
-        height: 24,
-    },
-    textContainer: {
-        flex: 1,
-    },
-    message: {
-        fontSize: 16,
-        lineHeight: 22,
-    },
-    time: {
-        fontSize: 12,
-        color: '#888',
-        marginTop: 4,
-    },
+  container: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  header: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  listContainer: {
+    padding: 16,
+  },
+  notificationItem: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  notificationContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  message: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  timestamp: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+  },
+  chatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 8,
+    backgroundColor: '#E7F3FF',
+    borderRadius: 6,
+  },
+  chatButtonText: {
+    marginLeft: 8,
+    color: '#007BFF',
+    fontWeight: '600',
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 50,
+    fontSize: 16,
+    color: '#888',
+  },
 });
 
 export default SellerNotifications;
