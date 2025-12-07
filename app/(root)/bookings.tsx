@@ -1,50 +1,107 @@
-import { View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useState } from 'react';
 import { useGlobalContext } from '@/lib/global-provider';
-import { getUserBookings, cancelBooking } from '@/lib/api/buyer';
 import { useRouter } from 'expo-router';
-import icons from '@/constants/icons';
+import { Ionicons } from '@expo/vector-icons';
 
-const Bookings = () => {
+import { getUserBookings, cancelBooking } from '@/lib/api/buyer';
+import { getBrokerBookings, confirmBooking, rejectBooking } from '@/lib/api/broker';
+
+const BookingsScreen = () => {
     const { user } = useGlobalContext();
     const router = useRouter();
     const [bookings, setBookings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
+    const isBroker = user?.role === 'broker';
     const fetchBookings = async () => {
-        if (!user) return;
-        setLoading(true);
-        try {
-            const data = await getUserBookings(user.$id);
-            setBookings(data);
-        } catch (error) {
-            console.error("Lỗi tải lịch hẹn:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+            if (!user) return;
+            if (!refreshing) setLoading(true);
+
+            try {
+                let data = [];
+
+                // Check Role trước -> Gọi hàm tương ứng
+                if (isBroker) {
+                    console.log("Fetching Broker bookings...");
+                    data = await getBrokerBookings(user.$id);
+                } else {
+                    console.log("Fetching Buyer bookings...");
+                    data = await getBuyerBookings(user.$id);
+                }
+
+                setBookings(data);
+            } catch (error) {
+                console.error("Lỗi tải lịch hẹn:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+    // 1. Lấy dữ liệu (Tự động lọc theo Role nhờ API)
 
     useEffect(() => {
         fetchBookings();
     }, [user]);
 
-    const handleCancelBooking = (bookingId: string) => {
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await fetchBookings();
+        setRefreshing(false);
+    };
+
+    const updateLocalList = (id: string, newStatus: string) => {
+            setBookings(prev => prev.map(item => item.$id === id ? { ...item, status: newStatus } : item));
+    };
+
+
+    // 3. XỬ LÝ HÀNH ĐỘNG CHO BUYER (Dùng hàm từ api/buyer)
+    const handleBuyerCancel = (bookingId: string) => {
+        Alert.alert("Hủy lịch hẹn", "Bạn chắc chắn muốn hủy?", [
+            { text: "Không", style: "cancel" },
+            {
+                text: "Hủy Lịch", style: "destructive",
+                onPress: async () => {
+                    try {
+                        await cancelBooking(bookingId); // Hàm riêng của Buyer
+                        updateLocalList(bookingId, 'cancelled');
+                        Alert.alert("Thành công", "Đã hủy lịch hẹn.");
+                    } catch (e) {
+                        Alert.alert("Lỗi", "Không thể hủy lịch.");
+                    }
+                }
+            }
+        ]);
+    };
+
+    // 2. Xử lý Broker: SỬA LỖI NÚT BẤM TẠI ĐÂY
+    const handleBrokerAction = (bookingId: string, actionType: 'confirm' | 'reject') => {
+        // Kiểm tra kỹ chuỗi actionType
+        const isConfirm = actionType === 'confirm';
+        const actionText = isConfirm ? "Chấp nhận" : "Từ chối";
+
         Alert.alert(
-            "Hủy lịch hẹn",
-            "Bạn có chắc chắn muốn hủy lịch hẹn này không?",
+            `${actionText} lịch hẹn`,
+            `Bạn có chắc chắn muốn ${actionText.toLowerCase()}?`,
             [
-                { text: "Không", style: "cancel" },
+                { text: "Đóng", style: "cancel" },
                 {
-                    text: "Đồng ý",
-                    style: "destructive",
+                    text: "Xác nhận",
+                    style: isConfirm ? 'default' : 'destructive', // Nút đỏ nếu từ chối, xanh/đen nếu chấp nhận
                     onPress: async () => {
                         try {
-                            await cancelBooking(bookingId);
-                            Alert.alert("Thành công", "Đã hủy lịch hẹn.");
-                            fetchBookings(); // Tải lại danh sách
-                        } catch (error) {
-                            Alert.alert("Lỗi", "Không thể hủy lịch hẹn. Vui lòng thử lại.");
+                            if (isConfirm) {
+                                // Gọi API Confirm
+                                await confirmBooking(bookingId);
+                                updateLocalList(bookingId, 'confirmed');
+                            } else {
+                                // Gọi API Reject
+                                await rejectBooking(bookingId);
+                                updateLocalList(bookingId, 'cancelled');
+                            }
+                        } catch (e) {
+                            Alert.alert("Lỗi", "Thao tác thất bại.");
                         }
                     }
                 }
@@ -52,15 +109,11 @@ const Bookings = () => {
         );
     };
 
+
+    // Helper: Format hiển thị
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleString('vi-VN', {
-            weekday: 'short',
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
+        return new Date(dateString).toLocaleString('vi-VN', {
+            weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
         });
     };
 
@@ -68,6 +121,7 @@ const Bookings = () => {
         switch (status) {
             case 'confirmed': return 'text-green-600 bg-green-100';
             case 'cancelled': return 'text-red-600 bg-red-100';
+            case 'completed': return 'text-blue-600 bg-blue-100';
             default: return 'text-yellow-600 bg-yellow-100';
         }
     };
@@ -75,90 +129,119 @@ const Bookings = () => {
     const getStatusText = (status: string) => {
         switch (status) {
             case 'confirmed': return 'Đã xác nhận';
-            case 'cancelled': return 'Đã hủy';
+            case 'cancelled': return 'Đã hủy/Từ chối';
+            case 'completed': return 'Hoàn thành';
             default: return 'Chờ xác nhận';
         }
     };
 
     return (
-        <SafeAreaView className="flex-1 bg-white">
-            <View className="flex-row items-center px-5 py-4 border-b border-gray-100">
+        <SafeAreaView className="flex-1 bg-gray-50">
+            <View className="flex-row items-center px-5 py-4 bg-white border-b border-gray-100 shadow-sm">
                 <TouchableOpacity onPress={() => router.back()} className="mr-4">
-                    <Image source={icons.backArrow} className="size-5" />
+                    <Ionicons name="arrow-back" size={24} color="#333" />
                 </TouchableOpacity>
-                <Text className="text-xl font-rubik-bold">Lịch hẹn của tôi</Text>
+                <Text className="text-xl font-rubik-bold text-gray-800">Quản lý Lịch hẹn</Text>
             </View>
 
-            {loading ? (
+            {loading && !refreshing ? (
                 <ActivityIndicator size="large" className="mt-10 text-primary-300" />
             ) : (
                 <FlatList
                     data={bookings}
                     keyExtractor={(item) => item.$id}
-                    contentContainerStyle={{ padding: 20 }}
+                    contentContainerStyle={{ padding: 20, paddingBottom: 50 }}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                     ListEmptyComponent={
                         <View className="items-center mt-20">
-                            <Image source={icons.calendar} className="size-20 opacity-20 mb-4" />
-                            <Text className="text-gray-500 text-lg">Bạn chưa có lịch hẹn nào.</Text>
+                            <Ionicons name="calendar-clear-outline" size={80} color="#ccc" />
+                            <Text className="text-gray-500 text-lg mt-4">Chưa có lịch hẹn nào.</Text>
                         </View>
                     }
                     renderItem={({ item }) => {
                         const property = item.property || {};
-                        const propertyId = property.$id || item.propertyId;
-                        // Nếu property là object (relationship) thì lấy image, nếu không fallback
-                        const imageSource = property.image ? { uri: property.image } : icons.home; 
-                        const propertyName = property.name || 'Thông tin bất động sản không khả dụng';
-                        const propertyAddress = property.address || 'Địa chỉ không xác định';
+                        const otherPerson = isBroker ? item.user : item.agent;
+                        const otherPersonLabel = isBroker ? "Khách hàng" : "Môi giới";
 
                         return (
-                            <View className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex-row">
-                                <TouchableOpacity 
-                                    onPress={() => propertyId && router.push(`/properties/${propertyId}`)}
-                                    disabled={!propertyId}
-                                    className="mr-4"
+                            <View className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4">
+                                <TouchableOpacity
+                                    onPress={() => property.$id && router.push(`/properties/${property.$id}`)}
+                                    className="flex-row border-b border-gray-100 pb-3 mb-3"
                                 >
-                                    <Image 
-                                        source={imageSource} 
-                                        className="w-24 h-24 rounded-lg bg-gray-200" 
+                                    <Image
+                                        source={{ uri: property.image || 'https://via.placeholder.com/150' }}
+                                        className="w-16 h-16 rounded-lg bg-gray-200"
                                         resizeMode="cover"
                                     />
-                                </TouchableOpacity>
-
-                                <View className="flex-1 justify-between">
-                                    <TouchableOpacity 
-                                        onPress={() => propertyId && router.push(`/properties/${propertyId}`)}
-                                        disabled={!propertyId}
-                                    >
-                                        <Text className="font-rubik-bold text-base text-black-300" numberOfLines={1}>
-                                            {propertyName}
+                                    <View className="flex-1 ml-3 justify-center">
+                                        <Text className="font-rubik-bold text-sm text-gray-800" numberOfLines={1}>
+                                            {property.name || 'BĐS không khả dụng'}
                                         </Text>
                                         <Text className="text-gray-500 text-xs mt-1" numberOfLines={1}>
-                                            {propertyAddress}
+                                            <Ionicons name="location-outline" size={10} /> {property.address}
                                         </Text>
-                                    </TouchableOpacity>
-                                    
-                                    <View className="mt-2">
-                                        <Text className="text-primary-300 font-rubik-medium text-sm">
-                                            {formatDate(item.date)}
-                                        </Text>
-                                        <View className="flex-row items-center justify-between mt-2">
-                                            <View className={`self-start px-2 py-1 rounded ${getStatusColor(item.status).split(' ')[1]}`}>
-                                                <Text className={`text-xs font-bold ${getStatusColor(item.status).split(' ')[0]}`}>
-                                                    {getStatusText(item.status)}
-                                                </Text>
-                                            </View>
-                                            
-                                            {item.status === 'pending' && (
-                                                <TouchableOpacity 
-                                                    onPress={() => handleCancelBooking(item.$id)}
-                                                    className="bg-gray-100 px-3 py-1 rounded-full"
-                                                >
-                                                    <Text className="text-xs text-red-500 font-rubik-medium">Hủy</Text>
-                                                </TouchableOpacity>
-                                            )}
+                                    </View>
+                                </TouchableOpacity>
+
+                                <View className="mb-3">
+                                    <View className="flex-row items-center justify-between mb-2">
+                                        <View className="flex-row items-center">
+                                            <Ionicons name="person-circle-outline" size={16} color="#666" />
+                                            <Text className="ml-2 text-sm text-gray-700 font-rubik-medium">
+                                                {otherPersonLabel}: <Text className="text-black font-bold">{otherPerson?.name || 'Ẩn danh'}</Text>
+                                            </Text>
                                         </View>
                                     </View>
+
+                                    <View className="flex-row items-center bg-blue-50 self-start px-2 py-1 rounded-md mb-2">
+                                        <Ionicons name="time-outline" size={14} color="#0061FF" />
+                                        <Text className="ml-2 text-xs text-[#0061FF] font-rubik-medium">
+                                            {formatDate(item.date)}
+                                        </Text>
+                                    </View>
+                                    {item.note && <Text className="text-xs text-gray-500 italic">"Note: {item.note}"</Text>}
                                 </View>
+
+                                {/* NÚT BẤM */}
+                                {item.status === 'pending' ? (
+                                    <View className="pt-2 border-t border-gray-100 flex-row gap-3">
+                                        {isBroker ? (
+                                            // BROKER BUTTONS
+                                            <>
+                                                <TouchableOpacity
+                                                    // QUAN TRỌNG: Truyền đúng chuỗi 'reject'
+                                                    onPress={() => handleBrokerAction(item.$id, 'reject')}
+                                                    className="flex-1 bg-red-50 py-2.5 rounded-lg border border-red-100 items-center"
+                                                >
+                                                    <Text className="text-red-600 font-bold text-xs">Từ chối</Text>
+                                                </TouchableOpacity>
+
+                                                <TouchableOpacity
+                                                    // QUAN TRỌNG: Truyền đúng chuỗi 'confirm'
+                                                    onPress={() => handleBrokerAction(item.$id, 'confirm')}
+                                                    className="flex-1 bg-green-600 py-2.5 rounded-lg shadow-sm items-center"
+                                                >
+                                                    <Text className="text-white font-bold text-xs">Chấp nhận</Text>
+                                                </TouchableOpacity>
+                                            </>
+                                        ) : (
+                                            // BUYER BUTTON
+                                            <TouchableOpacity
+                                                onPress={() => handleBuyerCancel(item.$id)}
+                                                className="flex-1 bg-gray-100 py-2.5 rounded-lg items-center"
+                                            >
+                                                <Text className="text-gray-600 font-bold text-xs">Hủy yêu cầu</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                ) : (
+                                    <View className={`self-start px-3 py-1 rounded-md mt-1 ${getStatusColor(item.status).split(' ')[1]}`}>
+                                        <Text className={`text-xs font-bold ${getStatusColor(item.status).split(' ')[0]}`}>
+                                            {getStatusText(item.status)}
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
                         );
                     }}
@@ -168,4 +251,4 @@ const Bookings = () => {
     );
 };
 
-export default Bookings;
+export default BookingsScreen;

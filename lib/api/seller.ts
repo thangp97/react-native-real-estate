@@ -13,21 +13,23 @@ export async function getUserProperties({ userId }: { userId: string }) {
     }
 }
 
-export async function getMyActiveProperties({ userId }: { userId: string }) {
-    if (!userId) return [];
+export async function getMyActiveProperties(userId: string) {
     try {
         const result = await databases.listDocuments(
-            config.databaseId!, 
-            config.propertiesCollectionId!, 
+            config.databaseId!,
+            config.propertiesCollectionId!,
             [
-                Query.equal('seller', userId), 
-                Query.equal('status', 'available'),
-                Query.orderDesc('$createdAt')
+                Query.equal('brokerId', userId), // Lọc theo ID của Broker
+                Query.notEqual('status', 'sold'), // Loại bỏ các tin đã bán
+                Query.notEqual('status', 'rejected'), // Loại bỏ các tin bị từ chối
+                Query.orderDesc('$updatedAt'), // Tin được cập nhật gần nhất lên đầu
             ]
         );
+
+        console.log(`LOG: Danh sách tin đang quản lý của Broker ${userId} (${result.total} tin)`);
         return result.documents;
-    } catch (e: any) {
-        console.error("Lỗi khi lấy BĐS đang hoạt động:", e);
+    } catch (error) {
+        console.error("Lỗi khi lấy danh sách tin đang quản lý:", error);
         return [];
     }
 }

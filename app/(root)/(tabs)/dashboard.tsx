@@ -5,7 +5,7 @@ import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator, Ref
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalContext } from '@/lib/global-provider';
 // Import các hàm API thật
-import { getBrokerStats, getBrokerRecentProperties, assignPropertyToBroker } from '@/lib/api/broker';
+import { getBrokerStats, getBrokerRecentProperties, assignPropertyToBroker, getAllPendingProperties } from '@/lib/api/broker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
@@ -19,36 +19,65 @@ const BrokerDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // Chức năng xử lý khi Broker nhận tin
     const handlePickTask = async (propertyId: string) => {
-        if (!user) return;
-        setLoading(true);
-        try {
-            await assignPropertyToBroker(propertyId, user.$id);
-            Alert.alert("Thành công", "Bạn đã nhận duyệt tin này. Nó đã được chuyển vào mục Đang quản lý.");
+            if (!user) return;
 
-            // Tải lại dữ liệu sau khi nhận việc
-            await fetchData();
+            setLoading(true);
 
-        } catch (e) {
-            Alert.alert("Lỗi", "Không thể nhận duyệt tin. Vui lòng kiểm tra quyền.");
-        } finally {
-            setLoading(false);
-        }
-    };
+            try {
+                // 1. Gọi API Backend để cập nhật DB
+                await assignPropertyToBroker(propertyId, user.$id);
 
+                // 2. Thông báo thành công
+                Alert.alert("Thành công", "Bạn đã nhận duyệt tin này. Nó đã được chuyển vào mục Đang quản lý.");
+
+                // 3. Cập nhật UI ngay lập tức (Optimistic UI)
+                // Xóa tin khỏi danh sách Pending cục bộ
+                setPendingProps(prev => prev.filter(prop => prop.$id !== propertyId));
+
+                // Cập nhật số liệu thống kê cục bộ
+                setStats(prev => ({
+                    ...prev,
+                    pendingCount: Math.max(0, prev.pendingCount - 1),
+                    myActiveCount: prev.myActiveCount + 1
+                }));
+
+                // LƯU Ý: Không gọi fetchData() ở đây để tránh Race Condition (Server chưa kịp index)
+
+            } catch (e: any) {
+                Alert.alert("Lỗi", "Không thể nhận duyệt tin. Vui lòng kiểm tra lại kết nối hoặc quyền hạn.");
+
+                // Nếu lỗi xảy ra, tải lại dữ liệu để đảm bảo hiển thị đúng trạng thái từ server
+                await fetchData();
+            } finally {
+                setLoading(false);
+            }
+        };
 
     const fetchData = async () => {
         if (!user) return;
 
-        const [statsData, pendingData] = await Promise.all([
-            getBrokerStats(user.$id),
-            getBrokerRecentProperties(user.$id)
-        ]);
+        try {
+            const [statsData, pendingData] = await Promise.all([
+                getBrokerStats(user.$id),
+                getBrokerRecentProperties(user.$id)
+            ]);
 
-        setStats(statsData);
-        setPendingProps(pendingData);
-        setLoading(false);
+            // Log để kiểm tra xem promise có resolve thành công không
+            console.log("API calls resolved successfully.");
+
+            setStats(statsData);
+            setPendingProps(pendingData);
+
+        } catch (e) {
+            // Log lỗi nếu một trong các API thất bại
+            console.error("Lỗi khi tải dữ liệu dashboard:", e);
+            Alert.alert("Lỗi tải dữ liệu", "Không thể kết nối với máy chủ.");
+
+        } finally {
+            // QUAN TRỌNG: Đảm bảo loading tắt dù thành công hay thất bại
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -87,7 +116,10 @@ const BrokerDashboard = () => {
                 {/* Thống kê (Stats Grid) */}
                 <View className="flex-row flex-wrap justify-between mb-6">
                     {/* Ô 1: Việc cần làm (Pending) */}
-                    <TouchableOpacity className="w-[48%] bg-white p-4 rounded-xl shadow-sm mb-4 border border-red-100">
+                    <TouchableOpacity
+                        onPress={() => router.push('/all-pending')} // <--- Thêm dòng này
+                        className="w-[48%] bg-white p-4 rounded-xl shadow-sm mb-4 border border-red-100"
+                    >
                         <View className="bg-red-50 w-10 h-10 rounded-full justify-center items-center mb-2">
                             <Ionicons name="notifications" size={20} color="#EF4444" />
                         </View>
@@ -96,13 +128,16 @@ const BrokerDashboard = () => {
                     </TouchableOpacity>
 
                     {/* Ô 2: Đang quản lý */}
-                    <View className="w-[48%] bg-white p-4 rounded-xl shadow-sm mb-4 border border-blue-100">
+                    <TouchableOpacity
+                        onPress={() => router.push('/my-listings')} // Chuyển hướng sang tab My Listings
+                        className="w-[48%] bg-white p-4 rounded-xl shadow-sm mb-4 border border-blue-100"
+                    >
                         <View className="bg-blue-50 w-10 h-10 rounded-full justify-center items-center mb-2">
                             <Ionicons name="briefcase" size={20} color="#0061FF" />
                         </View>
                         <Text className="text-2xl font-rubik-bold text-black-300">{stats.myActiveCount}</Text>
                         <Text className="text-xs font-rubik text-gray-500">Đang quản lý</Text>
-                    </View>
+                    </TouchableOpacity>
 
                     {/* Ô 3: Đã chốt */}
                     <View className="w-[48%] bg-white p-4 rounded-xl shadow-sm border border-green-100">
@@ -126,7 +161,9 @@ const BrokerDashboard = () => {
                 {/* Danh sách chờ duyệt (Queue) */}
                 <View className="flex-row justify-between items-center mb-4">
                     <Text className="text-xl font-rubik-bold text-black-300">Việc cần làm ngay ({pendingProps.length})</Text>
-                    <TouchableOpacity>
+
+                    {/* THÊM SỰ KIỆN TẠI ĐÂY */}
+                    <TouchableOpacity onPress={() => router.push('/all-pending')}>
                         <Text className="text-[#0061FF] font-rubik-medium">Xem tất cả</Text>
                     </TouchableOpacity>
                 </View>

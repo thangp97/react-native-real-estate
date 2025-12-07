@@ -50,6 +50,7 @@ const TabsLayout = () => {
                 <Tabs.Screen name="dashboard" options={{ href: null }} />
                 <Tabs.Screen name="seller-notifications" options={{ href: null }} />
                 <Tabs.Screen name="seller-chat" options={{ href: null }} />
+                <Tabs.Screen name="all-pending" options={{ href: null }} />
             </Tabs>
         );
     }
@@ -69,6 +70,7 @@ const TabsLayout = () => {
                 <Tabs.Screen name="explore" options={{ href: null }} />
                 <Tabs.Screen name="dashboard" options={{ href: null }} />
                 <Tabs.Screen name="review-property/[id]" options={{ href: null }} />
+                <Tabs.Screen name="all-pending" options={{ href: null }} />
             </Tabs>
         );
     }
@@ -78,6 +80,14 @@ const TabsLayout = () => {
         return (
             <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
                 <Tabs.Screen name="dashboard" options={{ title: 'Dashboard', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="briefcase" size={24} color={color} /> }} />
+                <Tabs.Screen
+                    name="my-listings" // Cần tạo file app/(root)/(tabs)/my-listings.tsx
+                        options={{
+                        title: 'Tin của tôi',
+                        headerShown: false,
+                        tabBarIcon: ({ color }) => <Ionicons name="business" size={24} color={color} />
+                    }}
+                />
                 <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
 
                 {/* Ẩn các tab không liên quan */}
@@ -86,6 +96,9 @@ const TabsLayout = () => {
                 <Tabs.Screen name="my-properties" options={{ href: null }} />
                 <Tabs.Screen name="seller-notifications" options={{ href: null }} />
                 <Tabs.Screen name="seller-chat" options={{ href: null }} />
+                <Tabs.Screen name="saved" options={{ href: null }} />
+                <Tabs.Screen name="review-property/[id]" options={{ href: null }} />
+                <Tabs.Screen name="all-pending" options={{ href: null }} />
             </Tabs>
         );
     }
@@ -94,3 +107,4 @@ const TabsLayout = () => {
 };
 
 export default TabsLayout;
+``
