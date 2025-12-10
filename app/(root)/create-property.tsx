@@ -1,14 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
-import { View, Text, TextInput, Button, Alert, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, FlatList, ActivityIndicator } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import { databases, storage, config } from '@/lib/appwrite';
-import { getPropertyById } from '@/lib/api/buyer';
-import { ID } from 'react-native-appwrite';
-import { useGlobalContext } from '@/lib/global-provider';
-import { ImagePickerAsset } from 'expo-image-picker';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import icons from '@/constants/icons';
+import { getPropertyById } from '@/lib/api/buyer';
+import { config, databases, storage } from '@/lib/appwrite';
+import { useGlobalContext } from '@/lib/global-provider';
+import * as ImagePicker from 'expo-image-picker';
+import { ImagePickerAsset } from 'expo-image-picker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ID } from 'react-native-appwrite';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const PROPERTY_TYPES = ['House', 'Townhouse', 'Condo', 'Duplex', 'Studio', 'Villa', 'Apartment', 'Others'];
 
@@ -62,7 +62,6 @@ interface PropertyForm {
     bedrooms: string;
     bathrooms: string;
     photos: (ImagePickerAsset | { uri: string })[];
-    expiresAt: Date; // Thêm ngày hết hạn vào form state
 }
 
 const CreateProperty = () => {
@@ -75,13 +74,6 @@ const CreateProperty = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isPickerVisible, setIsPickerVisible] = useState(false);
 
-    // **TÍNH TOÁN NGÀY HẾT HẠN MẶC ĐỊNH**
-    const defaultExpirationDate = useMemo(() => {
-        const date = new Date();
-        date.setDate(date.getDate() + 15);
-        return date;
-    }, []);
-
     const [form, setForm] = useState<PropertyForm>({
         name: '',
         description: '',
@@ -93,8 +85,16 @@ const CreateProperty = () => {
         bedrooms: '',
         bathrooms: '',
         photos: [],
-        expiresAt: defaultExpirationDate, // **GÁN NGÀY HẾT HẠN MẶC ĐỊNH**
     });
+
+    // Tính toán ngày hết hạn (15 ngày từ hôm nay)
+    const calculateExpiryDate = () => {
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + 15);
+        return expiryDate;
+    };
+
+    const expiryDate = calculateExpiryDate();
 
     useEffect(() => {
         if (isEditing) {
@@ -114,7 +114,6 @@ const CreateProperty = () => {
                             bedrooms: property.bedrooms.toString(),
                             bathrooms: property.bathrooms.toString(),
                             photos: [{ uri: property.image }],
-                            expiresAt: new Date(property.expiresAt), // Lấy ngày hết hạn khi chỉnh sửa
                         });
                     }
                 } catch (error) {
@@ -158,6 +157,9 @@ const CreateProperty = () => {
     const handleSubmit = async () => {
         setIsSubmitting(true);
         try {
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 15); // Mặc định 15 ngày
+
             const data = {
                 seller: user!.$id,
                 name: form.name,
@@ -171,7 +173,7 @@ const CreateProperty = () => {
                 bathrooms: parseInt(form.bathrooms),
                 rating: 0,
                 status: 'pending_approval',
-                expiresAt: form.expiresAt.toISOString(), // Lấy từ state
+                expiresAt: expiresAt.toISOString(),
             };
 
             if (isEditing) {
@@ -213,6 +215,29 @@ const CreateProperty = () => {
                     <Text style={styles.title}>{isEditing ? 'Chỉnh sửa tin' : 'Đăng tin Bất động sản'}</Text>
                 </View>
 
+                {/* Thông báo ngày hết hạn */}
+                {!isEditing && (
+                    <View style={styles.expiryInfoBox}>
+                        <Text style={styles.expiryInfoTitle}>📅 Thông tin hiển thị</Text>
+                        <Text style={styles.expiryInfoText}>
+                            Bài đăng sẽ được hiển thị trong <Text style={styles.expiryInfoBold}>15 ngày</Text>
+                        </Text>
+                        <Text style={styles.expiryInfoDate}>
+                            Ngày hết hạn: <Text style={styles.expiryInfoBold}>
+                                {expiryDate.toLocaleDateString('vi-VN', { 
+                                    weekday: 'long', 
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric' 
+                                })}
+                            </Text>
+                        </Text>
+                        <Text style={styles.expiryInfoNote}>
+                            💡 Bạn có thể gia hạn thêm bằng credits sau khi bài đăng được duyệt
+                        </Text>
+                    </View>
+                )}
+
                 <Text style={styles.label}>Tên bài đăng</Text>
                 <TextInput style={styles.input} placeholder="Ví dụ: Bán nhà mặt tiền Quận 1" value={form.name} onChangeText={(e) => setForm({ ...form, name: e })} />
 
@@ -248,63 +273,351 @@ const CreateProperty = () => {
                 <Text style={styles.label}>Số phòng tắm</Text>
                 <TextInput style={styles.input} placeholder="Ví dụ: 2" value={form.bathrooms} onChangeText={(e) => setForm({ ...form, bathrooms: e })} keyboardType="numeric" />
 
-                <TouchableOpacity style={styles.pickerButton} onPress={openPicker}>
-                    <Text style={styles.pickerText}>Chọn ảnh (đã chọn {form.photos.length})</Text>
+                <TouchableOpacity style={styles.pickerButton} onPress={openPicker} activeOpacity={0.7}>
+                    <Text style={styles.pickerText}>
+                        📸 Chọn ảnh {form.photos.length > 0 ? `(đã chọn ${form.photos.length})` : '(chưa có ảnh)'}
+                    </Text>
                 </TouchableOpacity>
 
-                {/* **HIỂN THỊ NGÀY HẾT HẠN** */}
-                <View style={styles.infoBox}>
-                    <Text style={styles.infoText}>
-                        Tin đăng sẽ tự động hết hạn vào ngày: 
-                        <Text style={{ fontWeight: 'bold' }}> {form.expiresAt.toLocaleDateString('vi-VN')}</Text>
-                    </Text>
-                </View>
-
-                <View style={{ marginTop: 20 }}>
-                    <Button title={isSubmitting ? "Đang xử lý..." : (isEditing ? "Cập nhật" : "Gửi đi")} onPress={handleSubmit} disabled={isSubmitting} />
+                <View style={styles.submitButtonContainer}>
+                    <TouchableOpacity 
+                        style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]} 
+                        onPress={handleSubmit} 
+                        disabled={isSubmitting}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.submitButtonText}>
+                            {isSubmitting ? "⏳ Đang xử lý..." : (isEditing ? "✏️ Cập nhật" : "🚀 Đăng tin")}
+                        </Text>
+                    </TouchableOpacity>
                 </View>
             </ScrollView>
 
             <Modal visible={isPickerVisible} animationType="slide" transparent={true} onRequestClose={() => setIsPickerVisible(false)}>
-                <View style={styles.modalContainer}><View style={styles.modalContent}><FlatList data={Object.entries(REGIONS)} keyExtractor={(item) => item[0]} renderItem={({ item }) => (<TouchableOpacity style={styles.modalItem} onPress={() => onRegionSelect(item[0] as RegionKey)}><Text style={styles.modalItemText}>{item[1]}</Text></TouchableOpacity>)} /><Button title="Đóng" onPress={() => setIsPickerVisible(false)} /></View></View>
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>📍 Chọn Tỉnh/Thành phố</Text>
+                        <FlatList 
+                            data={Object.entries(REGIONS)} 
+                            keyExtractor={(item) => item[0]} 
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={styles.modalItem} 
+                                    onPress={() => onRegionSelect(item[0] as RegionKey)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={styles.modalItemText}>{item[1]}</Text>
+                                </TouchableOpacity>
+                            )} 
+                            showsVerticalScrollIndicator={false}
+                        />
+                        <TouchableOpacity 
+                            style={styles.modalCloseButton} 
+                            onPress={() => setIsPickerVisible(false)}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={styles.modalCloseButtonText}>Đóng</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </Modal>
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, paddingHorizontal: 20 },
-    header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingTop: 10 },
-    backButton: { padding: 8 },
-    title: { fontSize: 24, fontWeight: 'bold', marginLeft: 10 },
-    label: { fontSize: 16, fontWeight: '500', marginBottom: 5, color: '#333' },
-    input: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5, marginBottom: 15, fontSize: 16, height: 48, justifyContent: 'center' },
-    textArea: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5, marginBottom: 15, fontSize: 16, height: 120, textAlignVertical: 'top' },
-    inputText: { fontSize: 16 },
-    pickerButton: { backgroundColor: '#f0f0f0', padding: 15, borderRadius: 5, alignItems: 'center', marginBottom: 15 },
-    pickerText: { fontSize: 16 },
-    imagePreviewContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
-    previewImage: { width: 100, height: 100, borderRadius: 5, margin: 5 },
-    typeContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
-    typeButton: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#ccc', borderRadius: 20, marginRight: 8, marginBottom: 8 },
-    typeButtonSelected: { backgroundColor: '#007BFF', borderColor: '#007BFF' },
-    typeText: { color: '#333' },
-    typeTextSelected: { color: '#fff', fontWeight: 'bold' },
-    modalContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-    modalContent: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '70%' },
-    modalItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    modalItemText: { fontSize: 18, textAlign: 'center' },
+    container: { 
+        flex: 1, 
+        paddingHorizontal: 20,
+        backgroundColor: '#f8f9fa',
+    },
+    header: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        marginBottom: 24,
+        paddingTop: 10,
+        backgroundColor: '#fff',
+        marginHorizontal: -20,
+        paddingHorizontal: 20,
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+        elevation: 2,
+    },
+    backButton: { 
+        padding: 10,
+        borderRadius: 8,
+        backgroundColor: '#f0f0f0',
+    },
+    title: { 
+        fontSize: 26, 
+        fontWeight: 'bold', 
+        marginLeft: 12,
+        color: '#1a1a1a',
+        letterSpacing: 0.5,
+    },
+    label: { 
+        fontSize: 15, 
+        fontWeight: '600', 
+        marginBottom: 8,
+        marginTop: 4,
+        color: '#333',
+        letterSpacing: 0.3,
+    },
+    input: { 
+        borderWidth: 1.5, 
+        borderColor: '#d0d0d0', 
+        padding: 14, 
+        borderRadius: 10, 
+        marginBottom: 18, 
+        fontSize: 16, 
+        height: 52,
+        backgroundColor: '#fff',
+        color: '#333',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+    },
+    textArea: { 
+        borderWidth: 1.5, 
+        borderColor: '#d0d0d0', 
+        padding: 14, 
+        borderRadius: 10, 
+        marginBottom: 18, 
+        fontSize: 16, 
+        height: 140, 
+        textAlignVertical: 'top',
+        backgroundColor: '#fff',
+        color: '#333',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+    },
+    inputText: { 
+        fontSize: 16,
+        color: '#333',
+    },
+    pickerButton: { 
+        backgroundColor: '#fff', 
+        padding: 16, 
+        borderRadius: 10, 
+        alignItems: 'center', 
+        marginBottom: 18,
+        borderWidth: 1.5,
+        borderColor: '#d0d0d0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+    },
+    pickerText: { 
+        fontSize: 16,
+        color: '#333',
+        fontWeight: '500',
+    },
+    imagePreviewContainer: { 
+        flexDirection: 'row', 
+        flexWrap: 'wrap', 
+        justifyContent: 'flex-start',
+        marginBottom: 12,
+    },
+    previewImage: { 
+        width: 100, 
+        height: 100, 
+        borderRadius: 10, 
+        margin: 5,
+        borderWidth: 2,
+        borderColor: '#e0e0e0',
+    },
+    typeContainer: { 
+        flexDirection: 'row', 
+        flexWrap: 'wrap', 
+        marginBottom: 18,
+        gap: 8,
+    },
+    typeButton: { 
+        paddingVertical: 10, 
+        paddingHorizontal: 18, 
+        borderWidth: 1.5, 
+        borderColor: '#d0d0d0', 
+        borderRadius: 24, 
+        marginRight: 0,
+        marginBottom: 0,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+    },
+    typeButtonSelected: { 
+        backgroundColor: '#007BFF', 
+        borderColor: '#007BFF',
+        shadowColor: '#007BFF',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 3,
+    },
+    typeText: { 
+        color: '#555',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    typeTextSelected: { 
+        color: '#fff', 
+        fontWeight: 'bold',
+    },
+    modalContainer: { 
+        flex: 1, 
+        justifyContent: 'flex-end', 
+        backgroundColor: 'rgba(0,0,0,0.6)',
+    },
+    modalContent: { 
+        backgroundColor: 'white', 
+        borderTopLeftRadius: 24, 
+        borderTopRightRadius: 24, 
+        padding: 24, 
+        maxHeight: '70%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    modalItem: { 
+        paddingVertical: 18, 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#f0f0f0',
+        marginHorizontal: -8,
+        paddingHorizontal: 8,
+    },
+    modalItemText: { 
+        fontSize: 17, 
+        textAlign: 'center',
+        color: '#333',
+        fontWeight: '500',
+    },
     infoBox: {
         backgroundColor: '#E7F3FF',
-        padding: 12,
-        borderRadius: 8,
+        padding: 14,
+        borderRadius: 10,
         marginBottom: 20,
+        borderWidth: 1,
+        borderColor: '#b3d9ff',
     },
     infoText: {
         color: '#004085',
         fontSize: 15,
         textAlign: 'center',
-    }
+        lineHeight: 22,
+    },
+    expiryInfoBox: {
+        backgroundColor: '#f0f8ff',
+        borderLeftWidth: 5,
+        borderLeftColor: '#007BFF',
+        padding: 18,
+        borderRadius: 12,
+        marginBottom: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+        borderWidth: 1,
+        borderColor: '#d0e8ff',
+    },
+    expiryInfoTitle: {
+        fontSize: 17,
+        fontWeight: 'bold',
+        color: '#007BFF',
+        marginBottom: 10,
+        letterSpacing: 0.5,
+    },
+    expiryInfoText: {
+        fontSize: 15,
+        color: '#333',
+        marginBottom: 6,
+        lineHeight: 22,
+    },
+    expiryInfoDate: {
+        fontSize: 15,
+        color: '#333',
+        marginBottom: 10,
+        lineHeight: 22,
+    },
+    expiryInfoBold: {
+        fontWeight: 'bold',
+        color: '#007BFF',
+    },
+    expiryInfoNote: {
+        fontSize: 13,
+        color: '#666',
+        fontStyle: 'italic',
+        marginTop: 6,
+        lineHeight: 20,
+        backgroundColor: '#fff',
+        padding: 8,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+    },
+    submitButtonContainer: {
+        marginTop: 24,
+        marginBottom: 16,
+    },
+    submitButton: {
+        backgroundColor: '#007BFF',
+        paddingVertical: 16,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        shadowColor: '#007BFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        elevation: 5,
+    },
+    submitButtonDisabled: {
+        backgroundColor: '#6c757d',
+        shadowColor: '#6c757d',
+        opacity: 0.7,
+    },
+    submitButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 16,
+        textAlign: 'center',
+        letterSpacing: 0.5,
+    },
+    modalCloseButton: {
+        backgroundColor: '#f0f0f0',
+        paddingVertical: 14,
+        borderRadius: 10,
+        marginTop: 16,
+        alignItems: 'center',
+    },
+    modalCloseButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#333',
+    },
 });
 
 export default CreateProperty;

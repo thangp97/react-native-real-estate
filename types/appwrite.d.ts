@@ -1,4 +1,4 @@
-import { Models } from "react-native-appwrite";
+import "react-native-appwrite";
 
 declare module "react-native-appwrite" {
     namespace Models {
@@ -13,6 +13,7 @@ declare module "react-native-appwrite" {
             username?: string;
             email?: string;
             role?: string;
+            credits?: number;
         }
     }
 }
