@@ -1,5 +1,5 @@
-import {Account, Avatars, Client, Databases, ID, Storage, OAuthProvider, AppwriteException} from "react-native-appwrite";
 import * as Linking from 'expo-linking';
+import { Account, AppwriteException, Avatars, Client, Databases, ID, OAuthProvider, Storage } from "react-native-appwrite";
 
 export const config = {
     endpoint: process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT,
