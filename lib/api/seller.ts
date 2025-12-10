@@ -1,5 +1,5 @@
-import { databases, config, storage } from "../appwrite";
-import { Query, ID } from "react-native-appwrite";
+import { Query } from "react-native-appwrite";
+import { config, databases, storage } from "../appwrite";
 
 export async function getUserProperties({ userId }: { userId: string }) {
     if (!userId) return [];
@@ -82,6 +82,77 @@ export async function deleteProperty({ propertyId }: { propertyId: string }) {
         return true;
     } catch (error: any) {
         console.error("Lỗi khi xóa bất động sản:", error);
+        throw new Error(error.message);
+    }
+}
+
+export async function getSellerData({ userId }: { userId: string }) {
+    if (!userId) return null;
+    try {
+        const result = await databases.getDocument(config.databaseId!, config.profilesCollectionId!, userId);
+        return result;
+    } catch (e: any) {
+        console.error("Lỗi khi lấy dữ liệu người bán:", e);
+        return null;
+    }
+}
+
+export async function topUpCredit({ userId, amount }: { userId: string, amount: number }) {
+    if (!userId || amount <= 0) throw new Error("Cần có ID người dùng và số credit hợp lệ");
+    
+    try {
+        const seller: any = await getSellerData({ userId });
+        if (!seller) {
+            throw new Error("Không tìm thấy người dùng.");
+        }
+
+        const newCredits = (seller.credits || 0) + amount;
+
+        await databases.updateDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            userId,
+            { credits: newCredits }
+        );
+
+        return newCredits;
+    } catch (error: any) {
+        console.error("Lỗi khi nạp credit:", error);
+        throw new Error(error.message);
+    }
+}
+
+export async function renewProperty({ propertyId, currentExpiry, sellerId, days }: { propertyId: string, currentExpiry: Date, sellerId: string, days: number }) {
+    if (!propertyId || !currentExpiry || !sellerId || !days || days <= 0) {
+        throw new Error("Cần có ID bất động sản, ngày hết hạn hiện tại, ID người bán và số ngày gia hạn hợp lệ");
+    }
+
+    try {
+        const seller: any = await getSellerData({ userId: sellerId });
+        if (!seller || seller.credits < days) {
+            throw new Error(`Không đủ credits để gia hạn ${days} ngày. Bạn cần ${days} credits nhưng chỉ có ${seller?.credits || 0} credits.`);
+        }
+
+        const newExpiryDate = new Date(currentExpiry);
+        newExpiryDate.setDate(newExpiryDate.getDate() + days);
+
+        await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            { expiresAt: newExpiryDate.toISOString() }
+        );
+
+        await databases.updateDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            sellerId,
+            { credits: seller.credits - days }
+        );
+
+        return true;
+    } catch (error: any) {
+        console.error("Lỗi khi gia hạn bất động sản:", error);
         throw new Error(error.message);
     }
 }

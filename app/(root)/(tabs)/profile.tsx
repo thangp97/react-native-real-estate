@@ -1,5 +1,5 @@
 import {View, Text, ScrollView, Image, TouchableOpacity, ImageSourcePropType, Alert} from 'react-native'
-import React, {useState} from 'react'
+import React, {useEffect, useState} from 'react'
 import {SafeAreaView} from "react-native-safe-area-context";
 import * as ImagePicker from 'expo-image-picker';
 import icons from "@/constants/icons";
@@ -7,6 +7,7 @@ import {useGlobalContext} from "@/lib/global-provider";
 import {signOut as logout, updateUserProfile, uploadFile} from "@/lib/appwrite";
 import {settings} from "@/constants/data";
 import { useRouter } from 'expo-router';
+import {getSellerData} from "@/lib/api/seller";
 
 interface SettingItemProps {
     icon: ImageSourcePropType;
@@ -31,7 +32,20 @@ const SettingsItem = ({icon, title, onPress, textStyle, showArrow = true}:
 const Profile = () => {
     const {user, refetch, setUser} = useGlobalContext();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [credits, setCredits] = useState(0);
     const router = useRouter();
+
+    useEffect(() => {
+        const fetchCredits = async () => {
+            if (user?.$id) {
+                const sellerData: any = await getSellerData({userId: user.$id});
+                if (sellerData) {
+                    setCredits(sellerData.credits);
+                }
+            }
+        };
+        fetchCredits();
+    }, [user]);
 
     const handleLogout = async () => {
         await logout();
@@ -104,13 +118,19 @@ const Profile = () => {
                         </TouchableOpacity>
 
                         <Text className={"text-2xl font-rubik-bold mt-2"}>{user?.name}</Text>
+                        <Text className={"text-lg font-rubik-regular text-primary-500"}>Credits: {credits}</Text>
                     </View>
                 </View>
 
                 <View className={"flex flex-col mt-10"}>
-                    <SettingsItem 
-                        icon={icons.calendar} 
-                        title={"Lịch hẹn của tôi"} 
+                    <SettingsItem
+                        icon={icons.home}
+                        title={"Bất động sản của tôi"}
+                        onPress={() => router.push('/my-properties')}
+                    />
+                    <SettingsItem
+                        icon={icons.calendar}
+                        title={"Lịch hẹn của tôi"}
                         onPress={() => router.push('/bookings')}
                     />
                     <SettingsItem icon={icons.wallet} title={"Thanh toán"}

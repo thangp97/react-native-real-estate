@@ -52,20 +52,18 @@ export async function createUser(email: string, password: string, username: stri
     } catch (error) {
         console.error("Lỗi khi tạo session sau khi đăng ký:", error);
     }
-    
-    // DEV ONLY: Tạm thời vô hiệu hóa việc gửi email xác thực
-    // try {
-    //     await account.createVerification(Linking.createURL('/verification'));
-    // } catch (error) {
-    //     console.error("Lỗi khi gửi email xác thực:", error);
-    // }
 
     try {
         const profile = await databases.createDocument(
             config.databaseId!, 
             config.profilesCollectionId!, 
             newAccount.$id, 
-            { role: role, name: username, email: email }
+            { 
+                role: role, 
+                name: username, 
+                email: email,
+                credits: 10 // **GÁN CREDITS MẶC ĐỊNH**
+            }
         );
         return profile;
     } catch (error: any) {
@@ -111,11 +109,12 @@ export async function getCurrentUser() {
             ...currentAccount, 
             role: userProfile.role,
             avatar: userProfile.avatar,
+            credits: userProfile.credits // **LẤY CREDITS**
         };
 
     } catch (error: any) {
         if (error.code !== 401) {
-             console.log("Lỗi getCurrentUser:", error);
+            console.log("Lỗi getCurrentUser:", error);
         }
         return null;
     }
@@ -171,3 +170,27 @@ export async function uploadFile(file: any) {
     }
 }
 
+export async function updateCredit(userId: string, amount: number) {
+    try {
+        const userProfile = await databases.getDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            userId
+        );
+        
+        const currentCredits = userProfile.credits || 0;
+        const newCredits = currentCredits + amount;
+
+        await databases.updateDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            userId,
+            { credits: newCredits }
+        );
+
+        return newCredits;
+    } catch (error) {
+        console.error('Lỗi cập nhật credits:', error);
+        throw error;
+    }
+}
