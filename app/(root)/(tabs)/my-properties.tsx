@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { useState, useMemo, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity, Image, ActivityIndicator, ScrollView } from 'react-native';
 import { Link, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalContext } from '@/lib/global-provider';
@@ -41,6 +41,14 @@ const getStatusColor = (status: PropertyStatus) => {
     return colors[status] || '#777';
 };
 
+const FILTER_OPTIONS: { label: string; value: PropertyStatus | 'all' }[] = [
+    { label: 'Tất cả', value: 'all' },
+    { label: 'Chờ duyệt', value: 'pending_approval' },
+    { label: 'Đang bán', value: 'for_sale' },
+    { label: 'Đã bán', value: 'sold' },
+    { label: 'Bị từ chối', value: 'rejected' },
+];
+
 const PropertyCard = ({ item }: { item: PropertyDocument }) => (
     <View style={styles.card}>
         <Image source={{ uri: item.image }} style={styles.cardImage} resizeMode="cover" />
@@ -56,6 +64,7 @@ const PropertyCard = ({ item }: { item: PropertyDocument }) => (
 
 const MyProperties = () => {
     const { user } = useGlobalContext();
+    const [activeFilter, setActiveFilter] = useState<PropertyStatus | 'all'>('all');
 
     const { data: properties, refetch, loading } = useAppwrite({
         fn: getUserProperties,
@@ -67,17 +76,26 @@ const MyProperties = () => {
 
     const onRefresh = async () => {
         setRefreshing(true);
+        // **FIX: Gọi refetch với tham số đúng**
         if (user?.$id) {
             await refetch({ userId: user.$id });
         }
         setRefreshing(false);
     };
 
-    // Luôn cho phép tạo bài đăng mới trong môi trường dev
     const handleCreatePress = () => {
-        router.push('/create-property');
+        // Logic này đã được sửa ở lần trước, giữ nguyên
+            router.push('/create-property');
     };
 
+    const filteredProperties = useMemo(() => {
+        if (activeFilter === 'all') {
+            return properties;
+        }
+        return properties?.filter(p => p.status === activeFilter);
+    }, [properties, activeFilter]);
+
+    // **FIX: Thêm lại useEffect để tải dữ liệu khi vào trang**
     useEffect(() => {
         if (user?.$id) {
             refetch({ userId: user.$id });
@@ -87,7 +105,7 @@ const MyProperties = () => {
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
             <FlatList
-                data={properties as PropertyDocument[] | null}
+                data={filteredProperties as PropertyDocument[] | null}
                 keyExtractor={(item) => item.$id}
                 renderItem={({ item }) => (
                     <Link href={{ pathname: "/property-details", params: { id: item.$id } }} asChild>
@@ -102,6 +120,19 @@ const MyProperties = () => {
                         <TouchableOpacity style={styles.createButton} onPress={handleCreatePress}>
                             <Text style={styles.createButtonText}>+ Đăng tin mới</Text>
                         </TouchableOpacity>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContainer}>
+                            {FILTER_OPTIONS.map(option => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    style={[styles.filterButton, activeFilter === option.value && styles.filterButtonActive]}
+                                    onPress={() => setActiveFilter(option.value)}
+                                >
+                                    <Text style={[styles.filterText, activeFilter === option.value && styles.filterTextActive]}>
+                                        {option.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
                     </View>
                 )}
                 ListEmptyComponent={() => (
@@ -109,10 +140,7 @@ const MyProperties = () => {
                         {loading ? (
                             <ActivityIndicator size="large" />
                         ) : (
-                            <>
-                                <Text style={styles.emptyText}>Bạn chưa đăng tin nào.</Text>
-                                <Text style={styles.emptyText}>Hãy bắt đầu bằng cách nhấn nút "Đăng tin mới".</Text>
-                            </>
+                            <Text style={styles.emptyText}>Không có bất động sản nào phù hợp.</Text>
                         )}
                     </View>
                 )}
@@ -125,26 +153,47 @@ const MyProperties = () => {
 const styles = StyleSheet.create({
     header: {
         paddingHorizontal: 16,
-        paddingVertical: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        paddingBottom: 10,
         backgroundColor: '#fff'
     },
     headerTitle: {
         fontSize: 28,
-        fontWeight: 'bold'
+        fontWeight: 'bold',
+        marginTop: 20,
     },
     createButton: {
         backgroundColor: '#007BFF',
         padding: 12,
         borderRadius: 8,
         alignItems: 'center',
-        marginTop: 15
+        marginTop: 15,
+        marginBottom: 20,
     },
     createButtonText: {
         color: '#fff',
         fontSize: 16,
         fontWeight: 'bold'
+    },
+    filterContainer: {
+        flexDirection: 'row',
+        paddingVertical: 10,
+    },
+    filterButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 20,
+        marginRight: 10,
+    },
+    filterButtonActive: {
+        backgroundColor: '#007BFF',
+    },
+    filterText: {
+        color: '#333',
+        fontWeight: '500',
+    },
+    filterTextActive: {
+        color: '#fff',
     },
     emptyContainer: {
         flex: 1,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { View, Text, TextInput, Button, Alert, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, FlatList, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -62,6 +62,7 @@ interface PropertyForm {
     bedrooms: string;
     bathrooms: string;
     photos: (ImagePickerAsset | { uri: string })[];
+    expiresAt: Date; // Thêm ngày hết hạn vào form state
 }
 
 const CreateProperty = () => {
@@ -73,6 +74,14 @@ const CreateProperty = () => {
     const [loading, setLoading] = useState(isEditing);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isPickerVisible, setIsPickerVisible] = useState(false);
+
+    // **TÍNH TOÁN NGÀY HẾT HẠN MẶC ĐỊNH**
+    const defaultExpirationDate = useMemo(() => {
+        const date = new Date();
+        date.setDate(date.getDate() + 15);
+        return date;
+    }, []);
+
     const [form, setForm] = useState<PropertyForm>({
         name: '',
         description: '',
@@ -83,7 +92,8 @@ const CreateProperty = () => {
         area: '',
         bedrooms: '',
         bathrooms: '',
-        photos: []
+        photos: [],
+        expiresAt: defaultExpirationDate, // **GÁN NGÀY HẾT HẠN MẶC ĐỊNH**
     });
 
     useEffect(() => {
@@ -103,7 +113,8 @@ const CreateProperty = () => {
                             area: property.area.toString(),
                             bedrooms: property.bedrooms.toString(),
                             bathrooms: property.bathrooms.toString(),
-                            photos: [{ uri: property.image }]
+                            photos: [{ uri: property.image }],
+                            expiresAt: new Date(property.expiresAt), // Lấy ngày hết hạn khi chỉnh sửa
                         });
                     }
                 } catch (error) {
@@ -148,7 +159,6 @@ const CreateProperty = () => {
         setIsSubmitting(true);
         try {
             const data = {
-                // **FIX: Thay 'sellerId' bằng 'seller'**
                 seller: user!.$id,
                 name: form.name,
                 description: form.description,
@@ -160,11 +170,13 @@ const CreateProperty = () => {
                 bedrooms: parseInt(form.bedrooms),
                 bathrooms: parseInt(form.bathrooms),
                 rating: 0,
-                status: 'pending_approval'
+                status: 'pending_approval',
+                expiresAt: form.expiresAt.toISOString(), // Lấy từ state
             };
 
             if (isEditing) {
-                await databases.updateDocument(config.databaseId!, 'properties', propertyId!, data);
+                const { expiresAt, ...updateData } = data;
+                await databases.updateDocument(config.databaseId!, 'properties', propertyId!, updateData);
                 Alert.alert('Thành công', 'Đã cập nhật bài đăng.');
             } else {
                 const coverImageUrl = await uploadFile(form.photos[0] as ImagePickerAsset);
@@ -188,12 +200,11 @@ const CreateProperty = () => {
         setIsPickerVisible(false);
     };
 
-    if (loading) {
-        return <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator size="large" /></View>;
-    }
+    if (loading) return <ActivityIndicator />;
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+            {/* ... (Giao diện giữ nguyên) ... */}
             <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }}>
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -204,10 +215,10 @@ const CreateProperty = () => {
 
                 <Text style={styles.label}>Tên bài đăng</Text>
                 <TextInput style={styles.input} placeholder="Ví dụ: Bán nhà mặt tiền Quận 1" value={form.name} onChangeText={(e) => setForm({ ...form, name: e })} />
-                
+
                 <Text style={styles.label}>Mô tả chi tiết</Text>
                 <TextInput style={styles.textArea} placeholder="Mô tả về vị trí, tiện ích, nội thất..." value={form.description} onChangeText={(e) => setForm({ ...form, description: e })} multiline numberOfLines={4} />
-                
+
                 <Text style={styles.label}>Tỉnh / Thành phố</Text>
                 <TouchableOpacity style={styles.input} onPress={() => setIsPickerVisible(true)}>
                     <Text style={styles.inputText}>{REGIONS[form.region] || 'Chọn một tỉnh'}</Text>
@@ -224,10 +235,10 @@ const CreateProperty = () => {
 
                 <Text style={styles.label}>Giá (VND)</Text>
                 <TextInput style={styles.input} placeholder="Ví dụ: 5000000000" value={form.price} onChangeText={(e) => setForm({ ...form, price: e })} keyboardType="numeric" />
-                
+
                 <Text style={styles.label}>Địa chỉ</Text>
                 <TextInput style={styles.input} placeholder="Số nhà, tên đường, phường, quận..." value={form.address} onChangeText={(e) => setForm({ ...form, address: e })} />
-                
+
                 <Text style={styles.label}>Diện tích (m²)</Text>
                 <TextInput style={styles.input} placeholder="Ví dụ: 80.5" value={form.area} onChangeText={(e) => setForm({ ...form, area: e })} keyboardType="numeric" />
 
@@ -241,10 +252,12 @@ const CreateProperty = () => {
                     <Text style={styles.pickerText}>Chọn ảnh (đã chọn {form.photos.length})</Text>
                 </TouchableOpacity>
 
-                <View style={styles.imagePreviewContainer}>
-                    {form.photos.map((photo, index) => (
-                        <Image key={index} source={{ uri: photo.uri }} style={styles.previewImage} />
-                    ))}
+                {/* **HIỂN THỊ NGÀY HẾT HẠN** */}
+                <View style={styles.infoBox}>
+                    <Text style={styles.infoText}>
+                        Tin đăng sẽ tự động hết hạn vào ngày: 
+                        <Text style={{ fontWeight: 'bold' }}> {form.expiresAt.toLocaleDateString('vi-VN')}</Text>
+                    </Text>
                 </View>
 
                 <View style={{ marginTop: 20 }}>
@@ -280,7 +293,18 @@ const styles = StyleSheet.create({
     modalContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
     modalContent: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '70%' },
     modalItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    modalItemText: { fontSize: 18, textAlign: 'center' }
+    modalItemText: { fontSize: 18, textAlign: 'center' },
+    infoBox: {
+        backgroundColor: '#E7F3FF',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 20,
+    },
+    infoText: {
+        color: '#004085',
+        fontSize: 15,
+        textAlign: 'center',
+    }
 });
 
 export default CreateProperty;

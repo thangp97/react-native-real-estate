@@ -107,9 +107,9 @@ const PropertyDetails = () => {
         );
     };
 
-    // **FIX: So sánh trực tiếp với property.seller vì nó là một chuỗi ID**
-    const isOwner = user && property && user.$id === property.seller;
-    const canEditOrDelete = isOwner && property.status === 'pending_approval';
+    // **FIX: Sửa lại logic kiểm tra quyền sở hữu và quyền chỉnh sửa**
+    const isOwner = user && property && user.$id === property.seller?.$id;
+    const canEditOrDelete = isOwner && ['pending_approval', 'rejected'].includes(property.status);
 
     if (loadingProperty || !property) {
         return <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><ActivityIndicator size="large" /></View>;
