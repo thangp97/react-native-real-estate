@@ -58,10 +58,46 @@ const TabsLayout = () => {
     if (user.role === 'seller') {
         return (
             <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
-                <Tabs.Screen name="my-properties" options={{ title: 'BĐS của tôi', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={24} color={color} /> }} />
-                <Tabs.Screen name="seller-notifications" options={{ title: 'Thông báo', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="notifications-outline" size={24} color={color} /> }} />
-                <Tabs.Screen name="seller-chat" options={{ title: 'Trò chuyện', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="chatbubbles-outline" size={24} color={color} /> }} />
-                <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
+                <Tabs.Screen 
+                    name="my-properties" 
+                    options={{ 
+                        title: 'BĐS của tôi', 
+                        headerShown: false, 
+                        tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={24} color={color} /> 
+                    }} 
+                />
+                <Tabs.Screen 
+                    name="search-properties" 
+                    options={{ 
+                        title: 'Tìm kiếm', 
+                        headerShown: false, 
+                        tabBarIcon: ({ color }) => <Ionicons name="search" size={24} color={color} /> 
+                    }} 
+                />
+                <Tabs.Screen 
+                    name="seller-notifications" 
+                    options={{ 
+                        title: 'Thông báo', 
+                        headerShown: false, 
+                        tabBarIcon: ({ color }) => <Ionicons name="notifications-outline" size={24} color={color} /> 
+                    }} 
+                />
+                <Tabs.Screen 
+                    name="seller-chat" 
+                    options={{ 
+                        title: 'Trò chuyện', 
+                        headerShown: false, 
+                        tabBarIcon: ({ color }) => <Ionicons name="chatbubbles-outline" size={24} color={color} /> 
+                    }} 
+                />
+                <Tabs.Screen 
+                    name="profile" 
+                    options={{ 
+                        title: 'Hồ Sơ', 
+                        headerShown: false, 
+                        tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> 
+                    }} 
+                />
 
                 <Tabs.Screen name="my-listings" options={{ href: null }} />
                 <Tabs.Screen name="saved" options={{ href: null }} />

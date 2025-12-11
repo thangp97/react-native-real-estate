@@ -297,10 +297,14 @@ const MyProperties = () => {
     };
 
     const filteredProperties = useMemo(() => {
-        if (activeFilter === 'all') {
-            return properties;
+        let filtered = properties || [];
+
+        // Filter theo status
+        if (activeFilter !== 'all') {
+            filtered = filtered.filter(p => p.status === activeFilter);
         }
-        return properties?.filter(p => p.status === activeFilter);
+
+        return filtered.length > 0 ? filtered : null;
     }, [properties, activeFilter]);
 
     useEffect(() => {
@@ -413,6 +417,44 @@ const MyProperties = () => {
                 </KeyboardAvoidingView>
             </Modal>
 
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>Bất động sản của tôi</Text>
+                
+                {/* Credit Balance Card - Chỉ hiển thị cho Seller */}
+                {isSeller && (
+                    <View style={styles.creditCard}>
+                        <View style={styles.creditInfo}>
+                            <Text style={styles.creditLabel}>Số dư Điểm</Text>
+                            <Text style={styles.creditAmount}>{credits} Điểm</Text>
+                            <Text style={styles.creditNote}>1 Điểm = 1 ngày gia hạn • Bài đăng mới: 15 ngày</Text>
+                        </View>
+                        <TouchableOpacity 
+                            style={styles.topUpButton} 
+                            onPress={handleTopUpNavigation}
+                        >
+                            <Text style={styles.topUpButtonText}>Nạp Điểm</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                <TouchableOpacity style={styles.createButton} onPress={handleCreatePress}>
+                    <Text style={styles.createButtonText}>+ Đăng tin mới</Text>
+                </TouchableOpacity>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContainer}>
+                    {FILTER_OPTIONS.map(option => (
+                        <TouchableOpacity
+                            key={option.value}
+                            style={[styles.filterButton, activeFilter === option.value && styles.filterButtonActive]}
+                            onPress={() => setActiveFilter(option.value)}
+                        >
+                            <Text style={[styles.filterText, activeFilter === option.value && styles.filterTextActive]}>
+                                {option.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+
             <FlatList
                 data={filteredProperties as PropertyDocument[] | null}
                 keyExtractor={(item) => item.$id}
@@ -429,45 +471,7 @@ const MyProperties = () => {
                         </TouchableOpacity>
                     </Link>
                 )}
-                ListHeaderComponent={() => (
-                    <View style={styles.header}>
-                        <Text style={styles.headerTitle}>Bất động sản của tôi</Text>
-                        
-                        {/* Credit Balance Card - Chỉ hiển thị cho Seller */}
-                        {isSeller && (
-                            <View style={styles.creditCard}>
-                                <View style={styles.creditInfo}>
-                                    <Text style={styles.creditLabel}>Số dư Điểm</Text>
-                                    <Text style={styles.creditAmount}>{credits} Điểm</Text>
-                                    <Text style={styles.creditNote}>1 Điểm = 1 ngày gia hạn • Bài đăng mới: 15 ngày</Text>
-                                </View>
-                                <TouchableOpacity 
-                                    style={styles.topUpButton} 
-                                    onPress={handleTopUpNavigation}
-                                >
-                                    <Text style={styles.topUpButtonText}>Nạp Điểm</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-
-                        <TouchableOpacity style={styles.createButton} onPress={handleCreatePress}>
-                            <Text style={styles.createButtonText}>+ Đăng tin mới</Text>
-                        </TouchableOpacity>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContainer}>
-                            {FILTER_OPTIONS.map(option => (
-                                <TouchableOpacity
-                                    key={option.value}
-                                    style={[styles.filterButton, activeFilter === option.value && styles.filterButtonActive]}
-                                    onPress={() => setActiveFilter(option.value)}
-                                >
-                                    <Text style={[styles.filterText, activeFilter === option.value && styles.filterTextActive]}>
-                                        {option.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                )}
+                keyboardShouldPersistTaps="handled"
                 ListEmptyComponent={() => (
                     <View style={styles.emptyContainer}>
                         {loading ? (
