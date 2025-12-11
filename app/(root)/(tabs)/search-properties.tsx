@@ -2,7 +2,7 @@ import icons from '@/constants/icons';
 import { getUserProperties } from '@/lib/api/seller';
 import { useGlobalContext } from '@/lib/global-provider';
 import { useAppwrite } from '@/lib/useAppwrite';
-import { Link, router } from 'expo-router';
+import { Link } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Models } from 'react-native-appwrite';
@@ -18,13 +18,36 @@ interface PropertyDocument extends Models.Document {
     address?: string;
 }
 
+const formatPrice = (price: number): string => {
+    if (price >= 1000000000) {
+        const ty = price / 1000000000;
+        if (ty % 1 === 0) {
+            return `${ty} tỷ`;
+        }
+        return `${ty.toFixed(1)} tỷ`;
+    } else if (price >= 1000000) {
+        const trieu = price / 1000000;
+        if (trieu % 1 === 0) {
+            return `${trieu} triệu`;
+        }
+        return `${trieu.toFixed(1)} triệu`;
+    } else if (price >= 1000) {
+        const nghin = price / 1000;
+        if (nghin % 1 === 0) {
+            return `${nghin} nghìn`;
+        }
+        return `${nghin.toFixed(1)} nghìn`;
+    }
+    return `${price.toLocaleString('vi-VN')} VND`;
+};
+
 const PropertyCard = ({ item }: { item: PropertyDocument }) => {
     return (
         <View style={styles.card}>
             <Image source={{ uri: item.image }} style={styles.cardImage} resizeMode="cover" />
             <View style={styles.cardContent}>
                 <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
-                <Text style={styles.cardPrice}>{item.price.toLocaleString('vi-VN')} VND</Text>
+                <Text style={styles.cardPrice}>{formatPrice(item.price)}</Text>
                 {item.address && (
                     <Text style={styles.cardAddress} numberOfLines={1}>{item.address}</Text>
                 )}

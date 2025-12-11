@@ -48,6 +48,32 @@ const getStatusColor = (status: PropertyStatus) => {
     return colors[status] || '#777';
 };
 
+const formatPrice = (price: number): string => {
+    if (price >= 1000000000) {
+        // >= 1 tỷ
+        const ty = price / 1000000000;
+        if (ty % 1 === 0) {
+            return `${ty} tỷ`;
+        }
+        return `${ty.toFixed(1)} tỷ`;
+    } else if (price >= 1000000) {
+        // >= 1 triệu
+        const trieu = price / 1000000;
+        if (trieu % 1 === 0) {
+            return `${trieu} triệu`;
+        }
+        return `${trieu.toFixed(1)} triệu`;
+    } else if (price >= 1000) {
+        // >= 1 nghìn
+        const nghin = price / 1000;
+        if (nghin % 1 === 0) {
+            return `${nghin} nghìn`;
+        }
+        return `${nghin.toFixed(1)} nghìn`;
+    }
+    return `${price.toLocaleString('vi-VN')} VND`;
+};
+
 const FILTER_OPTIONS: { label: string; value: PropertyStatus | 'all' }[] = [
     { label: 'Tất cả', value: 'all' },
     { label: 'Chờ môi giới nhận', value: 'available' },
@@ -78,7 +104,7 @@ const PropertyCard = ({ item, credits, onRenew, onAcceptPrice, isSeller }: {
             <Image source={{ uri: item.image }} style={styles.cardImage} resizeMode="cover" />
             <View style={styles.cardContent}>
                 <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
-                <Text style={styles.cardPrice}>{item.price.toLocaleString('vi-VN')} VND</Text>
+                <Text style={styles.cardPrice}>{formatPrice(item.price)}</Text>
                 
                 {/* Giá gợi ý từ môi giới */}
                 {isSeller && item.proposedPrice && (
@@ -86,7 +112,7 @@ const PropertyCard = ({ item, credits, onRenew, onAcceptPrice, isSeller }: {
                         <View style={styles.proposedPriceHeader}>
                             <Text style={styles.proposedPriceLabel}>💡 Giá gợi ý từ môi giới:</Text>
                             <Text style={styles.proposedPriceValue}>
-                                {item.proposedPrice.toLocaleString('vi-VN')} VND
+                                {formatPrice(item.proposedPrice)}
                             </Text>
                         </View>
                         <TouchableOpacity 
@@ -204,7 +230,7 @@ const MyProperties = () => {
 
         Alert.alert(
             '💡 Cập nhật giá',
-            `Bạn có muốn cập nhật giá từ ${(properties?.find((p: any) => p.$id === propertyId)?.price || 0).toLocaleString('vi-VN')} VND sang ${proposedPrice.toLocaleString('vi-VN')} VND không?`,
+            `Bạn có muốn cập nhật giá từ ${formatPrice(properties?.find((p: any) => p.$id === propertyId)?.price || 0)} sang ${formatPrice(proposedPrice)} không?`,
             [
                 { text: 'Hủy', style: 'cancel' },
                 {

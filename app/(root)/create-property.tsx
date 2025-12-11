@@ -21,6 +21,19 @@ const PROPERTY_TYPES = [
     { value: 'Others', label: 'Khác' }
 ];
 
+const DIRECTIONS = [
+    { value: 'North', label: 'Bắc' },
+    { value: 'South', label: 'Nam' },
+    { value: 'East', label: 'Đông' },
+    { value: 'West', label: 'Tây' },
+    { value: 'Northeast', label: 'Đông Bắc' },
+    { value: 'Northwest', label: 'Tây Bắc' },
+    { value: 'Southeast', label: 'Đông Nam' },
+    { value: 'Southwest', label: 'Tây Nam' },
+    { value: 'Multiple', label: 'Nhiều hướng' },
+    { value: 'Others', label: 'Khác' }
+];
+
 const REGIONS = {
     AnGiang: "An Giang",
     BaRiaVungTau: "Bà Rịa - Vũng Tàu",
@@ -65,9 +78,15 @@ interface PropertyForm {
     description: string;
     price: string;
     address: string;
+    ward: string; // Phường / Xã
     region: RegionKey;
     type: string;
+    direction: string; // Hướng
     area: string;
+    floors: string; // Số tầng (chỉ cho nhà)
+    frontage: string; // Mặt tiền (chỉ cho nhà)
+    depth: string; // Chiều sâu (chỉ cho nhà)
+    roadWidth: string; // Đường trước nhà (chỉ cho nhà)
     bedrooms: string;
     bathrooms: string;
     photos: (ImagePickerAsset | { uri: string })[];
@@ -88,9 +107,15 @@ const CreateProperty = () => {
         description: '',
         price: '',
         address: '',
+        ward: '',
         region: 'TPHCM',
         type: 'House',
+        direction: 'South',
         area: '',
+        floors: '',
+        frontage: '',
+        depth: '',
+        roadWidth: '',
         bedrooms: '',
         bathrooms: '',
         photos: [],
@@ -106,7 +131,7 @@ const CreateProperty = () => {
     const expiryDate = calculateExpiryDate();
 
     useEffect(() => {
-        if (isEditing) {
+        if (isEditing && propertyId) {
             const fetchPropertyData = async () => {
                 setLoading(true);
                 try {
@@ -117,15 +142,21 @@ const CreateProperty = () => {
                             description: property.description,
                             price: property.price.toString(),
                             address: property.address,
+                            ward: property.ward || '',
                             region: property.region as RegionKey,
                             type: property.type,
+                            direction: property.direction || 'South',
                             area: property.area.toString(),
+                            floors: property.floors?.toString() || '',
+                            frontage: property.frontage?.toString() || '',
+                            depth: property.depth?.toString() || '',
+                            roadWidth: property.roadWidth?.toString() || '',
                             bedrooms: property.bedrooms.toString(),
                             bathrooms: property.bathrooms.toString(),
                             photos: [{ uri: property.image }],
                         });
                     }
-                } catch (error) {
+                } catch {
                     Alert.alert("Lỗi", "Không thể tải dữ liệu bài đăng.");
                 } finally {
                     setLoading(false);
@@ -133,7 +164,7 @@ const CreateProperty = () => {
             };
             fetchPropertyData();
         }
-    }, [propertyId]);
+    }, [isEditing, propertyId]);
 
     const openPicker = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -169,14 +200,19 @@ const CreateProperty = () => {
             const expiresAt = new Date();
             expiresAt.setDate(expiresAt.getDate() + 15); // Mặc định 15 ngày
 
-            const data = {
+            // Kiểm tra loại hình có phải là nhà không (không phải chung cư)
+            const isHouseType = ['House', 'Townhouse', 'Duplex', 'Villa'].includes(form.type);
+            
+            const data: any = {
                 seller: user!.$id,
                 name: form.name,
                 description: form.description,
                 price: parseInt(form.price),
                 address: form.address,
+                ward: form.ward,
                 region: form.region,
                 type: form.type,
+                direction: form.direction,
                 area: parseFloat(form.area),
                 bedrooms: parseInt(form.bedrooms),
                 bathrooms: parseInt(form.bathrooms),
@@ -184,6 +220,14 @@ const CreateProperty = () => {
                 status: 'available', // Bài đăng mới luôn có status là 'available' để môi giới có thể nhận
                 expiresAt: expiresAt.toISOString(),
             };
+
+            // Chỉ thêm các trường này nếu là loại hình nhà
+            if (isHouseType) {
+                if (form.floors) data.floors = parseInt(form.floors);
+                if (form.frontage) data.frontage = parseFloat(form.frontage);
+                if (form.depth) data.depth = parseFloat(form.depth);
+                if (form.roadWidth) data.roadWidth = parseFloat(form.roadWidth);
+            }
 
             if (isEditing) {
                 // Khi chỉnh sửa, không thay đổi status và expiresAt
@@ -259,11 +303,34 @@ const CreateProperty = () => {
                     <Text style={styles.inputText}>{REGIONS[form.region] || 'Chọn một tỉnh'}</Text>
                 </TouchableOpacity>
 
+                <Text style={styles.label}>Phường / Xã</Text>
+                <TextInput 
+                    style={styles.input} 
+                    placeholder="Ví dụ: Phường 1, Quận 1" 
+                    value={form.ward} 
+                    onChangeText={(e) => setForm({ ...form, ward: e })} 
+                />
+
                 <Text style={styles.label}>Loại hình</Text>
                 <View style={styles.typeContainer}>
                     {PROPERTY_TYPES.map(type => (
                         <TouchableOpacity key={type.value} onPress={() => setForm({ ...form, type: type.value })} style={[styles.typeButton, form.type === type.value && styles.typeButtonSelected]}>
                             <Text style={[styles.typeText, form.type === type.value && styles.typeTextSelected]}>{type.label}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                <Text style={styles.label}>Hướng</Text>
+                <View style={styles.typeContainer}>
+                    {DIRECTIONS.map(direction => (
+                        <TouchableOpacity 
+                            key={direction.value} 
+                            onPress={() => setForm({ ...form, direction: direction.value })} 
+                            style={[styles.typeButton, form.direction === direction.value && styles.typeButtonSelected]}
+                        >
+                            <Text style={[styles.typeText, form.direction === direction.value && styles.typeTextSelected]}>
+                                {direction.label}
+                            </Text>
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -276,6 +343,47 @@ const CreateProperty = () => {
 
                 <Text style={styles.label}>Diện tích (m²)</Text>
                 <TextInput style={styles.input} placeholder="Ví dụ: 80.5" value={form.area} onChangeText={(e) => setForm({ ...form, area: e })} keyboardType="numeric" />
+
+                {/* Các trường chỉ hiển thị cho loại hình nhà (không phải chung cư) */}
+                {['House', 'Townhouse', 'Duplex', 'Villa'].includes(form.type) && (
+                    <>
+                        <Text style={styles.label}>Số tầng</Text>
+                        <TextInput 
+                            style={styles.input} 
+                            placeholder="Ví dụ: 3" 
+                            value={form.floors} 
+                            onChangeText={(e) => setForm({ ...form, floors: e })} 
+                            keyboardType="numeric" 
+                        />
+
+                        <Text style={styles.label}>Mặt tiền (m)</Text>
+                        <TextInput 
+                            style={styles.input} 
+                            placeholder="Ví dụ: 5.5" 
+                            value={form.frontage} 
+                            onChangeText={(e) => setForm({ ...form, frontage: e })} 
+                            keyboardType="numeric" 
+                        />
+
+                        <Text style={styles.label}>Chiều sâu (m)</Text>
+                        <TextInput 
+                            style={styles.input} 
+                            placeholder="Ví dụ: 15" 
+                            value={form.depth} 
+                            onChangeText={(e) => setForm({ ...form, depth: e })} 
+                            keyboardType="numeric" 
+                        />
+
+                        <Text style={styles.label}>Đường trước nhà (m)</Text>
+                        <TextInput 
+                            style={styles.input} 
+                            placeholder="Ví dụ: 6" 
+                            value={form.roadWidth} 
+                            onChangeText={(e) => setForm({ ...form, roadWidth: e })} 
+                            keyboardType="numeric" 
+                        />
+                    </>
+                )}
 
                 <Text style={styles.label}>Số phòng ngủ</Text>
                 <TextInput style={styles.input} placeholder="Ví dụ: 3" value={form.bedrooms} onChangeText={(e) => setForm({ ...form, bedrooms: e })} keyboardType="numeric" />
