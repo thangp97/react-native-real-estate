@@ -1,4 +1,4 @@
-import { Query } from "react-native-appwrite";
+import { ID, Query } from "react-native-appwrite";
 import { config, databases, storage } from "../appwrite";
 
 export async function getUserProperties({ userId }: { userId: string }) {
@@ -151,6 +151,110 @@ export async function renewProperty({ propertyId, currentExpiry, sellerId, days 
         return true;
     } catch (error: any) {
         console.error("Lỗi khi gia hạn bất động sản:", error);
+        throw new Error(error.message);
+    }
+}
+
+/**
+ * Lưu lịch sử thay đổi giá vào database
+ */
+async function savePriceHistory({ 
+    propertyId, 
+    oldPrice, 
+    newPrice, 
+    changedBy, 
+    reason 
+}: { 
+    propertyId: string, 
+    oldPrice: number, 
+    newPrice: number, 
+    changedBy: string,
+    reason?: string 
+}) {
+    try {
+        await databases.createDocument(
+            config.databaseId!,
+            config.priceHistoryCollectionId!,
+            ID.unique(),
+            {
+                propertyId: propertyId,
+                oldPrice: oldPrice,
+                newPrice: newPrice,
+                changedBy: changedBy,
+                reason: reason || 'Cập nhật giá từ môi giới',
+                changedAt: new Date().toISOString()
+            }
+        );
+    } catch (error: any) {
+        console.error("Lỗi khi lưu lịch sử giá:", error);
+        // Không throw error để không ảnh hưởng đến việc cập nhật giá
+    }
+}
+
+/**
+ * Lấy lịch sử thay đổi giá của một bất động sản
+ */
+export async function getPriceHistory({ propertyId }: { propertyId: string }) {
+    if (!propertyId) return [];
+    
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.priceHistoryCollectionId!,
+            [
+                Query.equal('propertyId', propertyId),
+                Query.orderDesc('$createdAt') // Sắp xếp mới nhất trước
+            ]
+        );
+        return result.documents;
+    } catch (error: any) {
+        console.error("Lỗi khi lấy lịch sử giá:", error);
+        return [];
+    }
+}
+
+export async function acceptProposedPrice({ propertyId, proposedPrice, userId }: { 
+    propertyId: string, 
+    proposedPrice: number,
+    userId: string 
+}) {
+    if (!propertyId || !proposedPrice || !userId) {
+        throw new Error("Cần có ID bất động sản, giá gợi ý và ID người dùng");
+    }
+
+    try {
+        // Lấy giá cũ trước khi cập nhật
+        const property: any = await databases.getDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId
+        );
+        
+        const oldPrice = property.price || 0;
+
+        // Cập nhật giá mới
+        await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            { 
+                price: proposedPrice,
+                proposedPrice: null
+            }
+        );
+
+        // Lưu lịch sử thay đổi giá
+        await savePriceHistory({
+            propertyId,
+            oldPrice,
+            newPrice: proposedPrice,
+            changedBy: userId,
+            reason: 'Chấp nhận giá gợi ý từ môi giới'
+        });
+
+        return true;
+    } catch (error: any) {
+        console.error("Lỗi khi cập nhật giá gợi ý:", error);
         throw new Error(error.message);
     }
 }
