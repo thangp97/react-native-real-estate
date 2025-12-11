@@ -19,7 +19,7 @@ import {
     Share // Added Share
 } from "react-native";
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { router, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import icons from "@/constants/icons";
@@ -35,41 +35,19 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useComparisonContext } from "@/lib/comparison-provider";
 import MortgageCalculator from "@/components/MortgageCalculator";
 
-type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'approved' | 'available';
-// ... (keep existing helper functions: formatStatus, getStatusColor) ...
-// Hàm helper để định dạng trạng thái và màu sắc
-const formatStatus = (status: PropertyStatus) => {
-    const statuses: Record<PropertyStatus, string> = {
-        'pending_approval': 'Chờ duyệt',
-        'for_sale': 'Đang bán',
-        'available': 'Đang bán',
-        'approved': 'Đang bán',
-        'deposit_paid': 'Đã cọc',
-        'sold': 'Đã bán',
-        'rejected': 'Bị từ chối',
-        'expired': 'Hết hạn'
-    };
-    return statuses[status] || status;
-};
+import { formatStatus, getStatusColor } from "@/lib/utils";
+import { markPropertyAsSold, getUserByEmail, updatePropertyPrice } from "@/lib/api/broker";
+import { createReview, checkReviewExists } from "@/lib/api/rating";
 
-const getStatusColor = (status: PropertyStatus) => {
-    const colors: Record<PropertyStatus, string> = {
-        'pending_approval': '#f0ad4e', // Vàng
-        'for_sale': '#5cb85c',       // Xanh lá
-        'available': '#5cb85c',      // Xanh lá
-        'approved': '#5cb85c',       // Xanh lá
-        'deposit_paid': '#337ab7',   // Xanh dương
-        'sold': '#d9534f',           // Đỏ
-        'rejected': '#777',          // Xám
-        'expired': '#777'            // Xám
-    };
-    return colors[status] || '#777';
-};
+type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'approved' | 'available';
 
 const Property = () => {
     const { id } = useLocalSearchParams<{ id?: string }>();
+    const router = useRouter(); // Initialize useRouter hook
     const { user, refetch: refetchUser, setUser } = useGlobalContext();
     const { addToCompare, removeFromCompare, isInCompare, compareList, clearCompare } = useComparisonContext();
+
+    const [loading, setLoading] = useState(true); // Restore loading state
 
     const windowHeight = Dimensions.get("window").height;
     const windowWidth = Dimensions.get("window").width;
@@ -80,6 +58,10 @@ const Property = () => {
             id: id!,
         },
     });
+
+    useEffect(() => {
+        setLoading(loadingProperty);
+    }, [loadingProperty]);
 
     const [similarProperties, setSimilarProperties] = useState<any[]>([]);
 
@@ -97,6 +79,149 @@ const Property = () => {
 
     // State cho comparison modal
     const [comparisonModalVisible, setComparisonModalVisible] = useState(false);
+
+    // State for Update Price Logic
+    const [priceModalVisible, setPriceModalVisible] = useState(false);
+    const [newPriceInput, setNewPriceInput] = useState('');
+    const [updatingPrice, setUpdatingPrice] = useState(false);
+
+    const handleUpdatePrice = async () => {
+        const price = parseInt(newPriceInput.replace(/\D/g, ''));
+        if (!price || price <= 0) {
+            Alert.alert("Lỗi", "Vui lòng nhập giá hợp lệ.");
+            return;
+        }
+
+        setUpdatingPrice(true);
+        try {
+            await updatePropertyPrice(id!, price, user!.$id);
+            Alert.alert("Thành công", "Đã cập nhật giá mới!");
+            setPriceModalVisible(false);
+            // Reload page to reflect new price
+            router.replace({ pathname: '/properties/[id]', params: { id } });
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể cập nhật giá. Vui lòng thử lại.");
+        } finally {
+            setUpdatingPrice(false);
+        }
+    };
+
+
+    // State for Review
+    const [reviewModalVisible, setReviewModalVisible] = useState(false);
+    const [ratingValue, setRatingValue] = useState(5);
+    const [reviewComment, setReviewComment] = useState('');
+    const [hasReviewed, setHasReviewed] = useState(false);
+    const [submittingReview, setSubmittingReview] = useState(false);
+
+    // State for Sold Logic
+    const [soldModalVisible, setSoldModalVisible] = useState(false);
+    const [buyerEmail, setBuyerEmail] = useState('');
+    const [markingSold, setMarkingSold] = useState(false);
+
+    // State for Review Logic
+    const [reviewModalVisible, setReviewModalVisible] = useState(false);
+    const [ratingValue, setRatingValue] = useState(5);
+    const [reviewComment, setReviewComment] = useState('');
+    const [hasReviewed, setHasReviewed] = useState(false);
+    const [submittingReview, setSubmittingReview] = useState(false);
+
+    const handleMarkAsSold = async () => {
+        if (!buyerEmail.trim()) {
+            Alert.alert("Lỗi", "Vui lòng nhập Email người mua.");
+            return;
+        }
+
+        setMarkingSold(true);
+        try {
+            // 1. Tìm người mua
+            const buyer = await getUserByEmail(buyerEmail.trim());
+            if (!buyer) {
+                Alert.alert("Lỗi", "Không tìm thấy người dùng với Email này trong hệ thống.");
+                setMarkingSold(false);
+                return;
+            }
+
+            // 2. Cập nhật trạng thái
+            await markPropertyAsSold(id!, buyer.$id);
+            
+            Alert.alert("Thành công", `Đã xác nhận bán cho ${buyer.name} (${buyer.email})`);
+            setSoldModalVisible(false);
+            // Reload page to reflect new price
+            router.replace({ pathname: '/properties/[id]', params: { id } });
+            
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể cập nhật trạng thái. Vui lòng thử lại.");
+        } finally {
+            setMarkingSold(false);
+        }
+    };
+
+    const isAgent = user && property?.agent && user.$id === property.agent.$id;
+
+    useEffect(() => {
+        if (property?.status === 'sold' && user?.$id) {
+            checkReviewExists(user.$id, id!).then(exists => setHasReviewed(exists));
+        }
+    }, [property, user, id]);
+
+    const handleSubmitReview = async () => {
+        if (!user || !property) return;
+        
+        let targetAgentId = DEFAULT_BROKER_ID;
+        if (property?.agent?.$id) targetAgentId = property.agent.$id;
+        else if (property?.brokerId) targetAgentId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
+
+        setSubmittingReview(true);
+        try {
+            await createReview({
+                reviewerId: user.$id,
+                agentId: targetAgentId,
+                propertyId: id!,
+                rating: ratingValue,
+                comment: reviewComment
+            });
+            Alert.alert("Cảm ơn", "Đánh giá của bạn đã được gửi!");
+            setHasReviewed(true);
+            setReviewModalVisible(false);
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể gửi đánh giá. Vui lòng thử lại.");
+        } finally {
+            setSubmittingReview(false);
+        }
+    };
+
+    useEffect(() => {
+        if (property?.status === 'sold' && user?.$id) {
+            checkReviewExists(user.$id, id!).then(exists => setHasReviewed(exists));
+        }
+    }, [property, user, id]);
+
+    const handleSubmitReview = async () => {
+        if (!user || !property) return;
+        
+        let targetAgentId = DEFAULT_BROKER_ID;
+        if (property?.agent?.$id) targetAgentId = property.agent.$id;
+        else if (property?.brokerId) targetAgentId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
+
+        setSubmittingReview(true);
+        try {
+            await createReview({
+                reviewerId: user.$id,
+                agentId: targetAgentId,
+                propertyId: id!,
+                rating: ratingValue,
+                comment: reviewComment
+            });
+            Alert.alert("Cảm ơn", "Đánh giá của bạn đã được gửi!");
+            setHasReviewed(true);
+            setReviewModalVisible(false);
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể gửi đánh giá. Vui lòng thử lại.");
+        } finally {
+            setSubmittingReview(false);
+        }
+    };
 
     // Carousel Logic
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -450,7 +575,17 @@ const Property = () => {
                         </Text>
 
                         <View className="flex flex-row items-center justify-between mt-4">
-                            <View className="flex flex-row items-center">
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (property?.agent?.$id) {
+                                        router.push(`/broker-details/${property.agent.$id}`);
+                                    } else if (property?.brokerId) {
+                                        const brokerId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
+                                        router.push(`/broker-details/${brokerId}`);
+                                    }
+                                }}
+                                className="flex flex-row items-center"
+                            >
                                 <Image
                                     source={currentBroker.avatar}
                                     className="size-14 rounded-full"
@@ -464,7 +599,7 @@ const Property = () => {
                                         {currentBroker.email}
                                     </Text>
                                 </View>
-                            </View>
+                            </TouchableOpacity>
 
                             <View className="flex flex-row items-center gap-3">
                                 <TouchableOpacity onPress={() => handleContact('sms')}>
@@ -488,40 +623,51 @@ const Property = () => {
 
                     <View className="mt-7">
                         <Text className="text-black-300 text-xl font-rubik-bold">
-                            Tiện nghi
+                            Đặc điểm bất động sản
                         </Text>
 
-                        {property?.facilities?.length > 0 && (
-                            <View className="flex flex-row flex-wrap items-start justify-start mt-2 gap-5">
-                                {property?.facilities.map((item: string, index: number) => {
-                                    const facility = facilities.find(
-                                        (facility) => facility.title === item
-                                    );
-
-                                    return (
-                                        <View
-                                            key={index}
-                                            className="flex flex-1 flex-col items-center min-w-16 max-w-20"
-                                        >
-                                            <View className="size-14 bg-primary-100 rounded-full flex items-center justify-center">
-                                                <Image
-                                                    source={facility ? facility.icon : icons.info}
-                                                    className="size-6"
-                                                />
-                                            </View>
-
-                                            <Text
-                                                numberOfLines={1}
-                                                ellipsizeMode="tail"
-                                                className="text-black-300 text-sm text-center font-rubik mt-1.5"
-                                            >
-                                                {item}
-                                            </Text>
-                                        </View>
-                                    );
-                                })}
-                            </View>
-                        )}
+                        <View className="flex flex-row flex-wrap items-start justify-between mt-4 gap-4">
+                            {[
+                                { label: 'Diện tích', value: property?.area ? `${property.area} m²` : 'Đang cập nhật', icon: icons.area },
+                                { label: 'Số tầng', value: property?.floors || 'Đang cập nhật', icon: icons.home },
+                                { label: 'Mặt tiền', value: property?.frontage ? `${property.frontage} m` : 'Đang cập nhật', icon: icons.info },
+                                { label: 'Chiều sâu', value: property?.depth ? `${property.depth} m` : 'Đang cập nhật', icon: icons.info },
+                                { label: 'Đường rộng', value: property?.roadWidth ? `${property.roadWidth} m` : 'Đang cập nhật', icon: icons.carPark },
+                                { 
+                                    label: 'Hướng', 
+                                    value: (() => {
+                                        const directions: Record<string, string> = {
+                                            'East': 'Đông', 'West': 'Tây', 'South': 'Nam', 'North': 'Bắc',
+                                            'North East': 'Đông Bắc', 'North West': 'Tây Bắc', 'South East': 'Đông Nam', 'South West': 'Tây Nam'
+                                        };
+                                        return directions[property?.direction] || property?.direction || 'Đang cập nhật';
+                                    })(), 
+                                    icon: icons.location 
+                                },
+                            ].map((item, index) => (
+                                <View
+                                    key={index}
+                                    className="flex flex-col items-center w-[48%] mb-6 p-2"
+                                >
+                                    <View className="size-16 bg-primary-100 rounded-full flex items-center justify-center mb-3">
+                                        <Image
+                                            source={item.icon}
+                                            className="size-8"
+                                            tintColor="#0061FF"
+                                        />
+                                    </View>
+                                    <Text className="text-black-200 text-sm font-rubik text-center mb-1">
+                                        {item.label}
+                                    </Text>
+                                    <Text
+                                        numberOfLines={1}
+                                        className="text-black-300 text-lg text-center font-rubik-bold"
+                                    >
+                                        {item.value}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
                     </View>
 
 
@@ -530,9 +676,9 @@ const Property = () => {
                         <Text className="text-black-300 text-xl font-rubik-bold">
                             Vị trí
                         </Text>
-                        <View className="flex flex-row items-center justify-start mt-4 gap-2">
-                            <Image source={icons.location} className="w-7 h-7" />
-                            <Text className="text-black-200 text-sm font-rubik-medium">
+                        <View className="flex flex-row items-center justify-start mt-4 gap-3">
+                            <Image source={icons.location} className="w-9 h-9" />
+                            <Text className="text-black-200 text-lg font-rubik-medium flex-1">
                                 {property?.address}
                             </Text>
                         </View>
@@ -540,10 +686,10 @@ const Property = () => {
                         <TouchableOpacity onPress={handleOpenMap} className="relative mt-5">
                             <Image
                                 source={images.map}
-                                className="h-52 w-full rounded-xl"
+                                className="h-80 w-full rounded-xl"
                             />
-                            <View className="absolute bottom-2 right-2 bg-white/90 px-3 py-1 rounded-full shadow-sm">
-                                <Text className="text-xs font-rubik-bold text-primary-300">
+                            <View className="absolute bottom-4 right-4 bg-white/90 px-4 py-2 rounded-full shadow-md">
+                                <Text className="text-sm font-rubik-bold text-primary-300">
                                     Chạm để xem bản đồ thực tế ↗
                                 </Text>
                             </View>
@@ -575,34 +721,269 @@ const Property = () => {
                         </View>
                     )}
 
-                </View>
-            </ScrollView>
+                                </View>
+
+                            </ScrollView>
+
+                
+
+                            {/* Review Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={reviewModalVisible}
+                onRequestClose={() => setReviewModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <View style={{ backgroundColor: 'white', padding: 25, borderRadius: 20, width: '85%' }}>
+                            <Text className="text-xl font-rubik-bold mb-4 text-center">Đánh giá Môi giới</Text>
+                            
+                            <Text className="text-center text-gray-500 mb-4">
+                                Bạn đánh giá thế nào về {currentBroker.name} trong giao dịch này?
+                            </Text>
+
+                            {/* Star Rating */}
+                            <View className="flex-row justify-center gap-2 mb-6">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <TouchableOpacity key={star} onPress={() => setRatingValue(star)}>
+                                        <Image 
+                                            source={icons.star} 
+                                            className="w-10 h-10" 
+                                            tintColor={star <= ratingValue ? "#FFD700" : "#E0E0E0"}
+                                        />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            <Text className="font-rubik-medium mb-2">Nhận xét của bạn:</Text>
+                            <TextInput 
+                                style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 10, height: 100, textAlignVertical: 'top', marginBottom: 20 }}
+                                placeholder="Môi giới rất nhiệt tình, chuyên nghiệp..."
+                                multiline
+                                value={reviewComment}
+                                onChangeText={setReviewComment}
+                            />
+
+                            <View className="flex-row justify-end gap-3">
+                                <Button title="Đóng" onPress={() => setReviewModalVisible(false)} color="#666" />
+                                <Button title={submittingReview ? "Đang gửi..." : "Gửi đánh giá"} onPress={handleSubmitReview} disabled={submittingReview} />
+                            </View>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* Review Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={reviewModalVisible}
+                onRequestClose={() => setReviewModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <View style={{ backgroundColor: 'white', padding: 25, borderRadius: 20, width: '85%' }}>
+                            <Text className="text-xl font-rubik-bold mb-4 text-center">Đánh giá Môi giới</Text>
+                            
+                            <Text className="text-center text-gray-500 mb-4">
+                                Bạn đánh giá thế nào về {currentBroker.name} trong giao dịch này?
+                            </Text>
+
+                            {/* Star Rating */}
+                            <View className="flex-row justify-center gap-2 mb-6">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <TouchableOpacity key={star} onPress={() => setRatingValue(star)}>
+                                        <Image 
+                                            source={icons.star} 
+                                            className="w-10 h-10" 
+                                            tintColor={star <= ratingValue ? "#FFD700" : "#E0E0E0"}
+                                        />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            <Text className="font-rubik-medium mb-2">Nhận xét của bạn:</Text>
+                            <TextInput 
+                                style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 10, height: 100, textAlignVertical: 'top', marginBottom: 20 }}
+                                placeholder="Môi giới rất nhiệt tình, chuyên nghiệp..."
+                                multiline
+                                value={reviewComment}
+                                onChangeText={setReviewComment}
+                            />
+
+                            <View className="flex-row justify-end gap-3">
+                                <Button title="Đóng" onPress={() => setReviewModalVisible(false)} color="#666" />
+                                <Button title={submittingReview ? "Đang gửi..." : "Gửi đánh giá"} onPress={handleSubmitReview} disabled={submittingReview} />
+                            </View>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* Price Update Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={priceModalVisible}
+                onRequestClose={() => setPriceModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <View style={{ backgroundColor: 'white', padding: 25, borderRadius: 20, width: '85%' }}>
+                            <Text className="text-xl font-rubik-bold mb-4 text-center">Cập nhật Giá Thị trường</Text>
+                            
+                            <Text className="text-center text-gray-500 mb-4">
+                                Nhập giá mới cho bất động sản này.
+                            </Text>
+
+                            <Text className="font-rubik-medium mb-2">Giá mới (VNĐ):</Text>
+                            <TextInput 
+                                style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, marginBottom: 20 }}
+                                placeholder="Ví dụ: 5000000000"
+                                keyboardType="numeric"
+                                value={newPriceInput}
+                                onChangeText={(text) => {
+                                    setNewPriceInput(text);
+                                }}
+                            />
+
+                            <View className="flex-row justify-end gap-3">
+                                <Button title="Hủy" onPress={() => setPriceModalVisible(false)} color="#666" />
+                                <Button title={updatingPrice ? "Đang lưu..." : "Lưu thay đổi"} onPress={handleUpdatePrice} disabled={updatingPrice} />
+                            </View>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* Sold Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={soldModalVisible}
+                onRequestClose={() => setSoldModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <View style={{ backgroundColor: 'white', padding: 25, borderRadius: 20, width: '85%' }}>
+                            <Text className="text-xl font-rubik-bold mb-4 text-center">Xác nhận Giao dịch Thành công</Text>
+                            
+                            <Text className="text-center text-gray-500 mb-4">
+                                Vui lòng nhập Email của người mua để hệ thống ghi nhận giao dịch và cấp quyền đánh giá.
+                            </Text>
+
+                            <Text className="font-rubik-medium mb-2">Email Người Mua:</Text>
+                            <TextInput 
+                                style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, marginBottom: 20 }}
+                                placeholder="nguoimua@example.com"
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                value={buyerEmail}
+                                onChangeText={setBuyerEmail}
+                            />
+
+                            <View className="flex-row justify-end gap-3">
+                                <Button title="Hủy" onPress={() => setSoldModalVisible(false)} color="#666" />
+                                <Button title={markingSold ? "Đang xử lý..." : "Xác nhận"} onPress={handleMarkAsSold} disabled={markingSold} />
+                            </View>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
 
             <View className="absolute bg-white bottom-0 w-full rounded-t-2xl border-t border-r border-l border-primary-200 p-7">
-                <View className="flex flex-row items-center justify-between gap-10">
-                    <View className="flex flex-col items-start">
+                <View className="flex flex-row items-center justify-between gap-3">
+                    <View className="flex flex-col items-start flex-shrink">
                         <Text className="text-black-200 text-xs font-rubik-medium">
                             Giá
                         </Text>
                         <Text
                             numberOfLines={1}
-                            className="text-primary-300 text-start text-2xl font-rubik-bold"
+                            className="text-primary-300 text-start text-xl font-rubik-bold"
                         >
                             {property?.price ? `${property.price.toLocaleString('vi-VN')} VND` : ''}
                         </Text>
                     </View>
 
                     {property?.status === 'sold' ? (
-                        <View className="flex-1 flex flex-row items-center justify-center bg-gray-400 py-3 rounded-full">
-                            <Text className="text-white text-lg text-center font-rubik-bold">
-                                Đã bán
-                            </Text>
-                        </View>
-                    ) : (
+                        (property.buyerId === user?.$id) ? (
+                            hasReviewed ? (
+                                <View className="flex-1 flex flex-row items-center justify-center bg-gray-200 py-3 rounded-full flex-shrink">
+                                    <Text className="text-gray-500 text-base text-center font-rubik-bold">
+                                        Đã đánh giá
+                                    </Text>
+                                </View>
+                            ) : (
+                                <TouchableOpacity 
+                                    onPress={() => setReviewModalVisible(true)}
+                                    className="flex-1 flex flex-row items-center justify-center bg-yellow-500 py-3 rounded-full flex-shrink shadow-md"
+                                >
+                                    <Text className="text-white text-base text-center font-rubik-bold">
+                                        ★ Đánh giá Môi giới
+                                    </Text>
+                                </TouchableOpacity>
+                            )
+                        ) : (
+                            <View className="flex-1 flex-row items-center justify-center bg-gray-400 py-3 rounded-full flex-shrink">
+                                <Text className="text-white text-lg text-center font-rubik-bold">
+                                    Đã bán
+                                </Text>
+                            </View>
+                        )
+                    {property?.status === 'sold' ? (
+                        (property.buyerId === user?.$id) ? (
+                            hasReviewed ? (
+                                <View className="flex-1 flex flex-row items-center justify-center bg-gray-200 py-3 rounded-full flex-shrink">
+                                    <Text className="text-gray-500 text-base text-center font-rubik-bold">
+                                        Đã đánh giá
+                                    </Text>
+                                </View>
+                            ) : (
+                                <TouchableOpacity 
+                                    onPress={() => setReviewModalVisible(true)}
+                                    className="flex-1 flex flex-row items-center justify-center bg-yellow-500 py-3 rounded-full flex-shrink shadow-md"
+                                >
+                                    <Text className="text-white text-base text-center font-rubik-bold">
+                                        ★ Đánh giá Môi giới
+                                    </Text>
+                                </TouchableOpacity>
+                            )
+                        ) : (
+                            <View className="flex-1 flex-row items-center justify-center bg-gray-400 py-3 rounded-full flex-shrink">
+                                <Text className="text-white text-lg text-center font-rubik-bold">
+                                    Đã bán
+                                </Text>
+                            </View>
+                        )
+                    ) : isAgent ? (
                         <View className="flex-1 flex-row gap-2">
                             <TouchableOpacity 
+                                onPress={() => {
+                                    setNewPriceInput(property?.price?.toString() || '');
+                                    setPriceModalVisible(true);
+                                }}
+                                className="flex-1 flex flex-row items-center justify-center bg-blue-500 py-3 rounded-full shadow-md"
+                            >
+                                <Text className="text-white text-sm text-center font-rubik-bold">
+                                    Cập nhật Giá
+                                </Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity 
+                                onPress={() => setSoldModalVisible(true)}
+                                className="flex-1 flex flex-row items-center justify-center bg-green-600 py-3 rounded-full shadow-md"
+                            >
+                                <Text className="text-white text-sm text-center font-rubik-bold">
+                                    Chốt đơn
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <View className="flex-1 flex-row gap-2 flex-shrink">
+                            <TouchableOpacity 
                                 onPress={() => setBookingModalVisible(true)}
-                                className="flex-1 flex flex-row items-center justify-center bg-primary-100 py-3 rounded-full"
+                                className="flex-1 flex-row items-center justify-center bg-primary-100 py-3 rounded-full"
                             >
                                 <Text className="text-primary-300 text-base text-center font-rubik-bold">
                                     Đặt lịch
@@ -611,7 +992,7 @@ const Property = () => {
                             
                             <TouchableOpacity 
                                 onPress={() => handleContact('call')}
-                                className="flex-1 flex flex-row items-center justify-center bg-primary-300 py-3 rounded-full shadow-md shadow-zinc-400"
+                                className="flex-1 flex-row items-center justify-center bg-primary-300 py-3 rounded-full shadow-md shadow-zinc-400"
                             >
                                 <Text className="text-white text-lg text-center font-rubik-bold">
                                     Liên hệ

@@ -6,7 +6,15 @@ export async function getLatestProperties() {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
-            [Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved'), Query.equal('status', 'sold')]), Query.orderDesc("$createdAt"), Query.limit(5)]
+            [
+                Query.or([
+                    Query.equal('status', 'approved'),
+                    Query.equal('status', 'deposit_paid'),
+                    Query.equal('status', 'sold')
+                ]),
+                Query.orderDesc("$createdAt"),
+                Query.limit(5)
+            ]
         );
         return result.documents;
     } catch (e) {
@@ -17,7 +25,14 @@ export async function getLatestProperties() {
 
 export async function getProperties({filter, query, limit, minPrice, maxPrice, bedrooms, area, region}: any) {
     try {
-        const buildQuery = [Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved'), Query.equal('status', 'sold')]), Query.orderDesc('$createdAt')];
+        const buildQuery = [
+            Query.or([
+                Query.equal('status', 'approved'),
+                Query.equal('status', 'deposit_paid'),
+                Query.equal('status', 'sold')
+            ]),
+            Query.orderDesc('$createdAt')
+        ];
 
         if (filter && filter !== 'All') {
             buildQuery.push(Query.equal('type', filter));
@@ -59,7 +74,11 @@ export async function getSimilarProperties({ propertyId, type }: any) {
         const buildQuery = [
             Query.equal('type', type),
             Query.notEqual('$id', propertyId),
-            Query.or([Query.equal('status', 'available'), Query.equal('status', 'approved')]),
+            Query.or([
+                Query.equal('status', 'approved'),
+                Query.equal('status', 'deposit_paid'),
+                Query.equal('status', 'sold')
+            ]),
             Query.limit(5),
             Query.orderDesc('$createdAt')
         ];
@@ -87,23 +106,48 @@ export async function getPropertyById({ id }: { id: string }) {
             config.databaseId!,
             config.propertiesCollectionId!,
             id,
-            // Corrected: Fetch brokerId info instead of assignedBroker
-            [Query.select(['*', 'brokerId.name', 'brokerId.email', 'brokerId.avatar'])] 
+            [
+                Query.select([
+                    '*', 
+                    'brokerId.name', 'brokerId.email', 'brokerId.avatar', 'brokerId.$id',
+                    'seller.name', 'seller.email', 'seller.avatar', 'seller.$id'
+                ])
+            ] 
         );
 
         if (!property) return null;
 
-        // Corrected: Map brokerId to property.agent
+        // 1. Xử lý thông tin Môi giới (Broker)
         if (property.brokerId) {
             const brokerData = typeof property.brokerId === 'object' ? property.brokerId : null;
             property.agent = {
-                $id: brokerData?.$id || property.brokerId, // Lấy ID của broker
-                name: brokerData?.name || 'N/A', // Tên broker
-                email: brokerData?.email || 'N/A', // Email broker
-                avatar: brokerData?.avatar || null, // Avatar broker
+                $id: brokerData?.$id || property.brokerId,
+                name: brokerData?.name || 'Môi giới',
+                email: brokerData?.email || 'N/A',
+                avatar: brokerData?.avatar || null,
             };
         } else {
-            property.agent = null; // Không có broker
+            property.agent = null;
+        }
+
+        // 2. Xử lý thông tin Người bán (Seller/Owner)
+        if (property.seller) {
+            const sellerData = typeof property.seller === 'object' ? property.seller : null;
+            property.sellerInfo = {
+                $id: sellerData?.$id || property.seller,
+                name: sellerData?.name || 'Chủ nhà',
+                email: sellerData?.email || 'N/A',
+                avatar: sellerData?.avatar || null,
+                // phone: sellerData?.phone || 'N/A' // Bỏ phone vì chưa có trong schema
+            };
+        } else {
+            // Fallback nếu không có relationship seller (dữ liệu cũ)
+            property.sellerInfo = {
+                $id: 'unknown',
+                name: 'Chủ nhà (Ẩn danh)',
+                email: 'N/A',
+                avatar: null
+            };
         }
 
         // --- Lấy các ảnh từ collection galleries ---
@@ -232,7 +276,7 @@ export async function getBuyerBookings(userId: string) {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.bookingsCollectionId!,
-            [Query.equal('user', userId), Query.orderDesc('date')]
+            [Query.equal('user', userId), Query.orderDesc('$createdAt')]
         );
 
         // Manually fetch property details for each booking to ensure data availability

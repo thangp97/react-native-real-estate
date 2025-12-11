@@ -20,8 +20,6 @@ export async function getMyActiveProperties(userId: string) {
             config.propertiesCollectionId!,
             [
                 Query.equal('brokerId', userId), // Lọc theo ID của Broker
-                Query.notEqual('status', 'sold'), // Loại bỏ các tin đã bán
-                Query.notEqual('status', 'rejected'), // Loại bỏ các tin bị từ chối
                 Query.orderDesc('$updatedAt'), // Tin được cập nhật gần nhất lên đầu
             ]
         );

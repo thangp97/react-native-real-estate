@@ -3,6 +3,7 @@ import React from 'react'
 import images from '@/constants/images';
 import icons from '@/constants/icons';
 import { Models } from 'react-native-appwrite';
+import { formatStatus, getStatusColor } from '@/lib/utils';
 
 interface Props {
     item: Models.Document;
@@ -35,13 +36,28 @@ export const FeaturedCard = ({item: {image, rating, name, address, price}, onPre
     )
 }
 
-export const Card = ({item: {image, rating, name, address, price}, onPress}: Props) => {
+export const Card = ({ item, onPress }: Props) => {
+    const { image, name, address, price, status } = item;
+    const formattedStatus = status ? formatStatus(status) : '';
+    const statusColor = status ? getStatusColor(status) : '#777';
+
     return (
         <TouchableOpacity onPress={onPress}
                           className={"flex-1 w-full mt-4 px-3 py-4 rounded-lg bg-white " +
                               "shadow-lg shadow-black-100/70 relative"}>
 
             <Image source={{uri: image}} className={"w-full h-40 rounded-lg"} />
+            
+            {status && (
+                <View 
+                    style={{ backgroundColor: statusColor }} 
+                    className="absolute top-6 left-6 px-3 py-1 rounded-full z-10"
+                >
+                    <Text className="text-white text-xs font-rubik-bold">
+                        {formattedStatus}
+                    </Text>
+                </View>
+            )}
 
             <View className={"flex flex-col mt-2"}>
                 <Text className={"text-base font-rubik-bold text-black-300"}

@@ -95,8 +95,35 @@ const ReviewPropertyDetailScreen = () => {
                     <Text className="text-xl font-bold mb-3 border-b pb-2">1. Thẩm Định Cơ Bản</Text>
 
                     <View className="mb-3">
-                        <Text className="font-medium text-gray-700">Người Bán:</Text>
-                        <Text className="text-blue-600 font-medium">{property.agent?.name || 'Chưa xác định'}</Text>
+                        <Text className="font-medium text-gray-700">Người Bán (Chủ nhà):</Text>
+                        <TouchableOpacity
+                            onPress={() => {
+                                if (property.sellerInfo?.$id && property.sellerInfo.$id !== 'unknown') {
+                                    router.push(`/seller-details/${property.sellerInfo.$id}`);
+                                } else {
+                                    Alert.alert('Thông báo', 'Không tìm thấy thông tin người bán.');
+                                }
+                            }}
+                        >
+                            <Text className="text-blue-600 font-medium underline">
+                                {property.sellerInfo?.name || 'Chưa xác định'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View className="mb-3">
+                        <Text className="font-medium text-gray-700">Môi Giới Phụ Trách:</Text>
+                        <TouchableOpacity
+                            onPress={() => {
+                                if (property.agent?.$id) {
+                                    router.push(`/broker-details/${property.agent.$id}`);
+                                }
+                            }}
+                        >
+                            <Text className="text-primary-300 font-medium font-rubik-bold">
+                                {property.agent?.name || 'Chưa có môi giới'}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
 
                     <Checkbox

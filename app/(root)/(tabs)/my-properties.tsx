@@ -106,6 +106,27 @@ const PropertyCard = ({ item, credits, onRenew, onAcceptPrice, isSeller }: {
                 <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
                 <Text style={styles.cardPrice}>{formatPrice(item.price)}</Text>
                 
+                {/* Môi giới phụ trách */}
+                {(item.broker || item.assignedBroker) ? (
+                    <View style={styles.brokerInfoRow}>
+                        <Text style={styles.brokerLabel}>Môi giới phụ trách: </Text>
+                        <TouchableOpacity
+                            onPress={() => {
+                                const brokerId = (item.broker?.$id || item.broker) || (item.assignedBroker?.$id || item.assignedBroker);
+                                if (brokerId) {
+                                    router.push(`/broker-details/${brokerId}`);
+                                } else {
+                                    Alert.alert('Thông báo', 'Không tìm thấy ID môi giới.');
+                                }
+                            }}
+                        >
+                            <Text style={styles.brokerName} numberOfLines={1}>
+                                {item.broker?.name || item.assignedBroker?.name || 'Đang cập nhật'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
+                
                 {/* Giá gợi ý từ môi giới */}
                 {isSeller && item.proposedPrice && (
                     <View style={styles.proposedPriceContainer}>
@@ -885,6 +906,23 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: 'bold',
+    },
+    brokerInfoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+        marginBottom: 8,
+    },
+    brokerLabel: {
+        fontSize: 12,
+        color: '#6c757d',
+    },
+    brokerName: {
+        fontSize: 12,
+        color: '#007BFF',
+        fontWeight: 'bold',
+        textDecorationLine: 'underline',
+        flexShrink: 1, // Allow text to shrink if long
     },
 });
 

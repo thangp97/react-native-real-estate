@@ -13,7 +13,8 @@ export const config = {
     galleriesCollectionId: 'galleries',
     bookingsCollectionId: 'bookings',
     notificationsCollectionId: 'notifications',
-    priceHistoryCollectionId: 'price_history', // Collection lưu lịch sử giá
+    priceHistoryCollectionId: 'price_history',
+    reviewsCollectionId: 'reviews', // Collection đánh giá
 }
 
 export const client = new Client();
@@ -109,11 +110,12 @@ export async function getCurrentUser() {
         
         return { 
             $id: currentAccount.$id,
-            email: currentAccount.email, // Email từ Account
-            name: userProfile.name || currentAccount.name, // Lấy name từ profiles collection, fallback về Account nếu không có
+            email: currentAccount.email,
+            name: userProfile.name || currentAccount.name,
             role: userProfile.role,
             avatar: userProfile.avatar || currentAccount.avatar,
-            credits: userProfile.credits // **LẤY CREDITS**
+            credits: userProfile.credits,
+            favorites: userProfile.favorites || [] // Lấy danh sách yêu thích
         };
 
     } catch (error: any) {
@@ -124,6 +126,18 @@ export async function getCurrentUser() {
     }
 }
 
+
+// ... other functions
+
+export async function getUserProfileById(userId: string) {
+    try {
+        const userProfile = await databases.getDocument(config.databaseId!, config.profilesCollectionId!, userId);
+        return userProfile;
+    } catch (error) {
+        console.error("Lỗi khi lấy hồ sơ người dùng theo ID:", error);
+        return null;
+    }
+}
 
 export async function signOut() {
     try {
