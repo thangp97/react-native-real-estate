@@ -10,7 +10,16 @@ import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleShee
 import { ID } from 'react-native-appwrite';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const PROPERTY_TYPES = ['House', 'Townhouse', 'Condo', 'Duplex', 'Studio', 'Villa', 'Apartment', 'Others'];
+const PROPERTY_TYPES = [
+    { value: 'House', label: 'Nhà phố' },
+    { value: 'Townhouse', label: 'Nhà liền kề' },
+    { value: 'Condo', label: 'Căn hộ' },
+    { value: 'Duplex', label: 'Nhà song lập' },
+    { value: 'Studio', label: 'Studio' },
+    { value: 'Villa', label: 'Biệt thự' },
+    { value: 'Apartment', label: 'Chung cư' },
+    { value: 'Others', label: 'Khác' }
+];
 
 const REGIONS = {
     AnGiang: "An Giang",
@@ -253,8 +262,8 @@ const CreateProperty = () => {
                 <Text style={styles.label}>Loại hình</Text>
                 <View style={styles.typeContainer}>
                     {PROPERTY_TYPES.map(type => (
-                        <TouchableOpacity key={type} onPress={() => setForm({ ...form, type: type })} style={[styles.typeButton, form.type === type && styles.typeButtonSelected]}>
-                            <Text style={[styles.typeText, form.type === type && styles.typeTextSelected]}>{type}</Text>
+                        <TouchableOpacity key={type.value} onPress={() => setForm({ ...form, type: type.value })} style={[styles.typeButton, form.type === type.value && styles.typeButtonSelected]}>
+                            <Text style={[styles.typeText, form.type === type.value && styles.typeTextSelected]}>{type.label}</Text>
                         </TouchableOpacity>
                     ))}
                 </View>
