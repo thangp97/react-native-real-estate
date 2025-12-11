@@ -21,6 +21,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getOrCreateChat } from '@/lib/api/chat';
 
 import icons from "@/constants/icons";
 import images from "@/constants/images";

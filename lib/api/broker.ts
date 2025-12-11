@@ -1,5 +1,5 @@
-import { databases, config } from "../appwrite";
-import { Query } from "react-native-appwrite";
+import { databases, config, storage } from "../appwrite";
+import { Query, ID } from "react-native-appwrite";
 
 export async function getAgentById({ agentId }: { agentId: string }) {
     if (!agentId) return null;
@@ -192,32 +192,27 @@ export async function getBrokerBookings(brokerId: string) {
             [Query.equal('agent', brokerId), Query.orderDesc('date')]
         );
 
-        // Manually fetch property details for each booking to ensure data availability
         const enrichedBookings = await Promise.all(result.documents.map(async (booking: any) => {
             try {
-                // Case 1: property is a string ID
-                if (booking.property && typeof booking.property === 'string') {
-                    const propertyData = await getPropertyById({ id: booking.property });
-                    if (propertyData) {
-                        booking.property = propertyData;
-                    }
-                }
-                // Case 2: property is an object but might be incomplete (e.g., missing name)
-                else if (booking.property && typeof booking.property === 'object') {
-                    // If name is missing, likely just a relationship wrapper or partial data
-                    if (!booking.property.name && booking.property.$id) {
-                        const propertyData = await getPropertyById({ id: booking.property.$id });
-                        if (propertyData) {
-                            booking.property = propertyData;
-                        }
-                    }
-                }
-                // Case 3: property is missing (null/undefined) - Data integrity issue
-                // We can't do much if we don't have an ID.
-            } catch (err) {
-                console.error(`Failed to enrich booking ${booking.$id}:`, err);
-            }
+                // 1. Lấy ID an toàn (dù nó là string hay object)
+                const propId = typeof booking.property === 'string'
+                    ? booking.property
+                    : booking.property?.$id;
 
+                // 2. Kiểm tra xem dữ liệu có bị thiếu không?
+                // (Thiếu là khi: property là chuỗi ID, HOẶC là object nhưng không có tên)
+                const isDataMissing = !booking.property || typeof booking.property === 'string' || !booking.property.name;
+
+                // 3. Nếu có ID và dữ liệu đang thiếu -> Gọi API lấy lại
+                if (propId && isDataMissing) {
+                    const fullProperty = await getPropertyById({ id: propId });
+                    if (fullProperty) {
+                        booking.property = fullProperty;
+                    }
+                }
+            } catch (err) {
+                console.warn(`[BrokerBookings] Không thể lấy chi tiết BĐS cho booking ${booking.$id}`);
+            }
             return booking;
         }));
 
@@ -329,20 +324,22 @@ export async function getPropertyById({ id }: { id: string }) {
             config.databaseId!,
             config.propertiesCollectionId!,
             id,
-            [Query.select(['*', 'seller.name', 'seller.email', 'seller.avatar'])] // Yêu cầu trả về các trường của seller
+            [Query.select(['*'])] // Yêu cầu trả về các trường của seller
         );
 
         if (!property) return null;
 
-        // Gán thông tin seller vào property.agent để frontend không cần thay đổi nhiều
-        if (property.seller) {
-            property.agent = {
-                name: property.seller.name,
-                email: property.seller.email,
-                avatar: property.seller.avatar,
-                // Thêm các trường khác của seller nếu cần thiết cho frontend
-            };
-        }
+        if (property.seller && typeof property.seller === 'string') {
+                    const sellerProfile = await getUserProfile(property.seller);
+                    if (sellerProfile) {
+                        property.seller = sellerProfile; // Gán đè lại object đầy đủ (có name, avatar,...)
+                    }
+                }
+                // Trường hợp Appwrite trả về object nhưng thiếu tên
+                else if (property.seller && !property.seller.name) {
+                     const sellerProfile = await getUserProfile(property.seller.$id);
+                     if (sellerProfile) property.seller = sellerProfile;
+                }
 
         // --- Lấy các ảnh từ collection galleries ---
         const galleryResult = await databases.listDocuments(
@@ -359,5 +356,74 @@ export async function getPropertyById({ id }: { id: string }) {
     } catch (error) {
         console.error(error);
         return null;
+    }
+}
+
+export async function getPropertyGallery(propertyId: string) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.galleriesCollectionId!,
+            [Query.equal('propertyId', propertyId)]
+        );
+        return result.documents;
+    } catch (error) {
+        console.error('Lỗi tải gallery:', error);
+        return [];
+    }
+}
+
+// 2. Hàm Upload File (Dùng chung logic với CreateProperty)
+export async function uploadFieldImage(file: any) {
+    if (!file.mimeType || !file.fileSize) return null;
+
+    const asset = {
+        name: file.fileName || `${ID.unique()}.jpg`,
+        type: file.mimeType,
+        size: file.fileSize,
+        uri: file.uri
+    };
+
+    try {
+        const uploadedFile = await storage.createFile(
+            config.storageId!,
+            ID.unique(),
+            asset
+        );
+
+        // Trả về URL xem ảnh
+        return `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
+    } catch (error) {
+        console.error('Lỗi upload file:', error);
+        throw error;
+    }
+}
+
+// 3. Hàm lưu link ảnh vào Collection Galleries
+export async function addImageToGalleryDoc(propertyId: string, imageUrl: string, uploaderId: string) {
+    return await databases.createDocument(
+        config.databaseId!,
+        config.galleriesCollectionId!,
+        ID.unique(),
+        {
+            propertyId: propertyId,
+            image: imageUrl,
+            uploaderId: uploaderId // Ghi nhận ai là người up ảnh này (Broker)
+        }
+    );
+}
+
+
+async function getUserProfile(profileId: string) {
+    try {
+        const profile = await databases.getDocument(
+            config.databaseId!,
+            config.profilesCollectionId!, // Đã trỏ vào bảng 'profiles'
+            profileId
+        );
+        return profile;
+    } catch (e) {
+        console.error("Không tìm thấy profile:", profileId);
+        return { name: "Người dùng ẩn danh", avatar: null }; // Fallback
     }
 }

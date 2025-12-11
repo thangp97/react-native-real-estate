@@ -61,7 +61,6 @@ const TabsLayout = () => {
             <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
                 <Tabs.Screen name="my-properties" options={{ title: 'BĐS của tôi', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={24} color={color} /> }} />
                 <Tabs.Screen name="seller-notifications" options={{ title: 'Thông báo', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="notifications-outline" size={24} color={color} /> }} />
-                <Tabs.Screen name="seller-chat" options={{ title: 'Trò chuyện', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="chatbubbles-outline" size={24} color={color} /> }} />
                 <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
 
                 <Tabs.Screen name="my-listings" options={{ href: null }} />
@@ -75,33 +74,43 @@ const TabsLayout = () => {
         );
     }
 
-    // Môi giới
     if (user.role === 'broker') {
-        return (
-            <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
-                <Tabs.Screen name="dashboard" options={{ title: 'Dashboard', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="briefcase" size={24} color={color} /> }} />
-                <Tabs.Screen
-                    name="my-listings" // Cần tạo file app/(root)/(tabs)/my-listings.tsx
-                        options={{
-                        title: 'Tin của tôi',
-                        headerShown: false,
-                        tabBarIcon: ({ color }) => <Ionicons name="business" size={24} color={color} />
-                    }}
-                />
-                <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
+            return (
+                <Tabs screenOptions={{ tabBarActiveTintColor: '#007BFF' }}>
+                    <Tabs.Screen name="dashboard" options={{ title: 'Dashboard', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="briefcase" size={24} color={color} /> }} />
+                    <Tabs.Screen
+                        name="my-listings"
+                            options={{
+                            title: 'Tin của tôi',
+                            headerShown: false,
+                            tabBarIcon: ({ color }) => <Ionicons name="business" size={24} color={color} />
+                        }}
+                    />
 
-                {/* Ẩn các tab không liên quan */}
-                <Tabs.Screen name="index" options={{ href: null }} />
-                <Tabs.Screen name="explore" options={{ href: null }} />
-                <Tabs.Screen name="my-properties" options={{ href: null }} />
-                <Tabs.Screen name="seller-notifications" options={{ href: null }} />
-                <Tabs.Screen name="seller-chat" options={{ href: null }} />
-                <Tabs.Screen name="saved" options={{ href: null }} />
-                <Tabs.Screen name="review-property/[id]" options={{ href: null }} />
-                <Tabs.Screen name="all-pending" options={{ href: null }} />
-            </Tabs>
-        );
-    }
+                    <Tabs.Screen
+                        name="seller-chat"
+                        options={{
+                            title: 'Tin nhắn',
+                            headerShown: false,
+                            tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
+                        }}
+                    />
+
+                    <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
+
+                    {/* Ẩn các tab không liên quan */}
+                    <Tabs.Screen name="index" options={{ href: null }} />
+                    <Tabs.Screen name="explore" options={{ href: null }} />
+                    <Tabs.Screen name="my-properties" options={{ href: null }} />
+                    <Tabs.Screen name="seller-notifications" options={{ href: null }} />
+
+
+                    <Tabs.Screen name="saved" options={{ href: null }} />
+                    <Tabs.Screen name="review-property/[id]" options={{ href: null }} />
+                    <Tabs.Screen name="all-pending" options={{ href: null }} />
+                </Tabs>
+            );
+        }
 
     return <SignOutAndRedirect />;
 };
