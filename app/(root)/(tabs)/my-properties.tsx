@@ -1,4 +1,4 @@
-import { getSellerData, getUserProperties, renewProperty, topUpCredit } from '@/lib/api/seller';
+import { getSellerData, getUserProperties, renewProperty } from '@/lib/api/seller';
 import { useGlobalContext } from '@/lib/global-provider';
 import { useAppwrite } from '@/lib/useAppwrite';
 import { Link, router } from 'expo-router';
@@ -115,8 +115,6 @@ const MyProperties = () => {
     const { user } = useGlobalContext();
     const [activeFilter, setActiveFilter] = useState<PropertyStatus | 'all'>('all');
     const [credits, setCredits] = useState(0);
-    const [showTopUpModal, setShowTopUpModal] = useState(false);
-    const [topUpAmount, setTopUpAmount] = useState('');
     const [showRenewModal, setShowRenewModal] = useState(false);
     const [renewDays, setRenewDays] = useState('');
     const [selectedProperty, setSelectedProperty] = useState<{ id: string, expiry: Date } | null>(null);
@@ -174,13 +172,13 @@ const MyProperties = () => {
 
         if (days > credits) {
             Alert.alert(
-                "Không đủ credits", 
-                `Bạn cần ${days} credits để gia hạn ${days} ngày nhưng chỉ có ${credits} credits. Vui lòng nạp thêm ${days - credits} credits.`,
+                "Không đủ điểm", 
+                `Bạn cần ${days} điểm để gia hạn ${days} ngày nhưng chỉ có ${credits} điểm. Vui lòng nạp thêm ${days - credits} điểm.`,
                 [
                     { text: "Hủy", style: "cancel" },
-                    { text: "Nạp Credits", onPress: () => {
+                    { text: "Nạp Điểm", onPress: () => {
                         setShowRenewModal(false);
-                        setShowTopUpModal(true);
+                        handleTopUpNavigation();
                     }}
                 ]
             );
@@ -208,24 +206,30 @@ const MyProperties = () => {
         router.push('/create-property');
     };
 
-    const handleTopUp = async () => {
-        if (!user?.$id) return;
-        
-        const amount = parseInt(topUpAmount);
-        if (isNaN(amount) || amount <= 0) {
-            Alert.alert("Lỗi", "Vui lòng nhập số credit hợp lệ (số nguyên dương).");
-            return;
-        }
-
-        try {
-            await topUpCredit({ userId: user.$id, amount });
-            Alert.alert("Thành công", `Đã nạp ${amount} credit thành công!`);
-            setShowTopUpModal(false);
-            setTopUpAmount('');
-            await fetchCredits();
-        } catch (error: any) {
-            Alert.alert("Lỗi", error.message);
-        }
+    const handleTopUpNavigation = () => {
+        // Hiển thị modal để chọn số credit muốn nạp
+        Alert.prompt(
+            'Nạp Điểm',
+            'Nhập số Điểm bạn muốn nạp (Gợi ý: 10, 30, 50, 100):',
+            [
+                { text: 'Hủy', style: 'cancel' },
+                {
+                    text: 'Tiếp tục',
+                    onPress: (amount?: string) => {
+                        const credits = parseInt(amount || '0');
+                        if (isNaN(credits) || credits <= 0) {
+                            Alert.alert('Lỗi', 'Vui lòng nhập số credits hợp lệ');
+                            return;
+                        }
+                        router.push({
+                            pathname: '/top-up-payment',
+                            params: { amount: credits.toString() }
+                        });
+                    }
+                }
+            ],
+            'plain-text'
+        );
     };
 
     const filteredProperties = useMemo(() => {
@@ -345,86 +349,6 @@ const MyProperties = () => {
                 </KeyboardAvoidingView>
             </Modal>
 
-            {/* Top Up Credit Modal */}
-            <Modal
-                visible={showTopUpModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setShowTopUpModal(false)}
-            >
-                <KeyboardAvoidingView 
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={{ flex: 1 }}
-                >
-                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                        <View style={styles.modalOverlay}>
-                            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
-                                <View style={styles.modalContent}>
-                                    <Text style={styles.modalTitle}>Nạp Credit</Text>
-                                    <Text style={styles.modalDescription}>
-                                        Nhập số credits bạn muốn nạp. Mỗi credit có thể gia hạn bài đăng thêm 1 ngày.
-                                    </Text>
-                                    
-                                    <View style={styles.inputContainer}>
-                                        <Text style={styles.inputLabel}>Số Credit</Text>
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Nhập số credit"
-                                            keyboardType="numeric"
-                                            value={topUpAmount}
-                                            onChangeText={setTopUpAmount}
-                                            returnKeyType="done"
-                                            onSubmitEditing={Keyboard.dismiss}
-                                        />
-                                    </View>
-
-                                    {/* Quick Select Buttons */}
-                                    <View style={styles.quickSelectContainer}>
-                                        <Text style={styles.quickSelectLabel}>Gợi ý:</Text>
-                                        <View style={styles.quickSelectButtons}>
-                                            {[10, 30, 50, 100].map(amount => (
-                                                <TouchableOpacity
-                                                    key={amount}
-                                                    style={styles.quickSelectButton}
-                                                    onPress={() => {
-                                                        setTopUpAmount(amount.toString());
-                                                        Keyboard.dismiss();
-                                                    }}
-                                                >
-                                                    <Text style={styles.quickSelectText}>{amount}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </View>
-
-                                    <View style={styles.modalButtons}>
-                                        <TouchableOpacity
-                                            style={[styles.modalButton, styles.cancelButton]}
-                                            onPress={() => {
-                                                Keyboard.dismiss();
-                                                setShowTopUpModal(false);
-                                                setTopUpAmount('');
-                                            }}
-                                        >
-                                            <Text style={styles.cancelButtonText}>Hủy</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={[styles.modalButton, styles.confirmButton]}
-                                            onPress={() => {
-                                                Keyboard.dismiss();
-                                                handleTopUp();
-                                            }}
-                                        >
-                                            <Text style={styles.confirmButtonText}>Nạp Credit</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            </TouchableWithoutFeedback>
-                        </View>
-                    </TouchableWithoutFeedback>
-                </KeyboardAvoidingView>
-            </Modal>
-
             <FlatList
                 data={filteredProperties as PropertyDocument[] | null}
                 keyExtractor={(item) => item.$id}
@@ -443,15 +367,15 @@ const MyProperties = () => {
                         {isSeller && (
                             <View style={styles.creditCard}>
                                 <View style={styles.creditInfo}>
-                                    <Text style={styles.creditLabel}>Số dư Credit</Text>
-                                    <Text style={styles.creditAmount}>{credits} Credits</Text>
-                                    <Text style={styles.creditNote}>1 Credit = 1 ngày gia hạn • Bài đăng mới: 15 ngày</Text>
+                                    <Text style={styles.creditLabel}>Số dư Điểm</Text>
+                                    <Text style={styles.creditAmount}>{credits} Điểm</Text>
+                                    <Text style={styles.creditNote}>1 Điểm = 1 ngày gia hạn • Bài đăng mới: 15 ngày</Text>
                                 </View>
                                 <TouchableOpacity 
                                     style={styles.topUpButton} 
-                                    onPress={() => setShowTopUpModal(true)}
+                                    onPress={handleTopUpNavigation}
                                 >
-                                    <Text style={styles.topUpButtonText}>Nạp Credit</Text>
+                                    <Text style={styles.topUpButtonText}>Nạp Điểm</Text>
                                 </TouchableOpacity>
                             </View>
                         )}
