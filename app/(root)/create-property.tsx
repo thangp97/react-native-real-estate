@@ -233,7 +233,7 @@ const CreateProperty = () => {
                             </Text>
                         </Text>
                         <Text style={styles.expiryInfoNote}>
-                            💡 Bạn có thể gia hạn thêm bằng credits sau khi bài đăng được duyệt
+                            💡 Bạn có thể gia hạn thêm bằng Điểm sau khi bài đăng được duyệt
                         </Text>
                     </View>
                 )}
