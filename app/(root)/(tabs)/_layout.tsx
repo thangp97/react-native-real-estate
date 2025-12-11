@@ -108,7 +108,6 @@ const TabsLayout = () => {
                         tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
                     }}
                 />
-                <Tabs.Screen name="search-properties" options={{ href: null }} />
                 <Tabs.Screen name="my-listings" options={{ href: null }} />
                 <Tabs.Screen name="saved" options={{ href: null }} />
                 <Tabs.Screen name="index" options={{ href: null }} />
