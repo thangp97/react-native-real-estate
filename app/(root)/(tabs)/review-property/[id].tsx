@@ -5,7 +5,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalContext } from '@/lib/global-provider';
 import { getOrCreateChat } from '@/lib/api/chat';
-// Import API
 import { getPropertyById, finalizeVerification, getPropertyGallery, uploadFieldImage, addImageToGalleryDoc } from '@/lib/api/broker';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
@@ -22,15 +21,22 @@ const ReviewPropertyDetailScreen = () => {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { user } = useGlobalContext();
 
+    // --- STATES ---
     const [property, setProperty] = useState<any>(null);
     const [existingImages, setExistingImages] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // AI States
+    const [aiPrediction, setAiPrediction] = useState<string | null>(null);
+    const [isAiLoading, setIsAiLoading] = useState(false);
+
+    // Image Upload States
     const [newImages, setNewImages] = useState<ImagePicker.ImagePickerAsset[]>([]);
     const [isUploading, setIsUploading] = useState(false);
 
+    // Form States
     const [form, setForm] = useState({
         proposedPrice: '',
         rejectionReason: '',
@@ -40,50 +46,60 @@ const ReviewPropertyDetailScreen = () => {
 
     const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-    // --- HÀM ĐIỀU HƯỚNG VỀ 'TIN CỦA TÔI' ---
+    // --- HELPER FUNCTIONS ---
+    const parsePriceRange = (rangeStr: string | null, area: number) => {
+        if (!rangeStr) return { min: 0, max: 0 };
+        try {
+            const parts = rangeStr.split('-').map(p => parseFloat(p));
+            if (parts.length === 2) {
+                const minTotal = parts[0] * area * 1000000;
+                const maxTotal = parts[1] * area * 1000000;
+                return { min: minTotal, max: maxTotal };
+            }
+            return { min: 0, max: 0 };
+        } catch (e) {
+            return { min: 0, max: 0 };
+        }
+    };
+
+    // --- 🟢 SỬA LỖI Ở ĐÂY: TÍNH TOÁN LOGIC TRƯỚC KHI RENDER ---
+    // Tính toán các giá trị AI ngay tại đây, không làm trong JSX
+    const { min: aiMinTotal, max: aiMaxTotal } = parsePriceRange(aiPrediction, property?.area || 0);
+    const currentPrice = property?.price || 0;
+
+    // Logic so sánh giá
+    const isGoodPrice = currentPrice >= aiMinTotal && currentPrice <= aiMaxTotal;
+    const isCheaper = currentPrice < aiMinTotal;
+    const isExpensive = currentPrice > aiMaxTotal;
+
+    // --- ACTIONS ---
     const goBackToMyListings = () => {
-        // Điều hướng rõ ràng về Tab "Tin của tôi"
         router.replace('/(root)/(tabs)/my-listings');
     };
 
     const handleChatWithSeller = async () => {
-            if (!user) return; // Đã check ở trên
+        if (!user) return;
+        const sellerData = property.sellerInfo || property.seller;
+        if (!sellerData || !sellerData.$id) {
+            Alert.alert("Lỗi", "Không tìm thấy ID người bán.");
+            return;
+        }
 
-            // Ưu tiên lấy từ sellerInfo đã được làm giàu, nếu không có thì fallback sang property.seller
-            const sellerData = property.sellerInfo || property.seller;
-
-            // Cần đảm bảo rằng SellerData là object và có $id
-            if (!sellerData || !sellerData.$id) {
-                console.error("DEBUG CHAT: Không tìm thấy Seller ID.");
-                Alert.alert("Lỗi", "Không tìm thấy ID người bán.");
-                return;
-            }
-
-            const sellerId = sellerData.$id;
-            const sellerName = sellerData.name || 'Người bán';
-            const sellerAvatar = sellerData.avatar;
-
-            try {
-                console.log(`[CHAT START] Broker ID: ${user.$id}, Seller ID: ${sellerId}`);
-
-                // 1. Tạo hoặc lấy Chat Room
-                const chatDoc = await getOrCreateChat(user.$id, sellerId);
-
-                // 2. Chuyển hướng
-                router.push({
-                    pathname: '/chat/[id]',
-                    params: {
-                        id: chatDoc.$id,
-                        otherUserId: sellerId,
-                        otherUserName: sellerName,
-                        otherUserAvatar: sellerAvatar
-                    }
-                });
-            } catch (error) {
-                console.error("LỖI TẠO CHAT ROOM:", error);
-                Alert.alert("Lỗi", "Không thể mở hộp thoại chat.");
-            }
-        };
+        try {
+            const chatDoc = await getOrCreateChat(user.$id, sellerData.$id);
+            router.push({
+                pathname: '/chat/[id]',
+                params: {
+                    id: chatDoc.$id,
+                    otherUserId: sellerData.$id,
+                    otherUserName: sellerData.name || 'Người bán',
+                    otherUserAvatar: sellerData.avatar
+                }
+            });
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể mở hộp thoại chat.");
+        }
+    };
 
     const fetchData = async () => {
         if (!id) return;
@@ -113,9 +129,56 @@ const ReviewPropertyDetailScreen = () => {
         }
     };
 
+    const fetchAIValuation = async () => {
+        if (!property) return;
+        setIsAiLoading(true);
+        try {
+            // Thay đổi IP này cho đúng máy của bạn
+            const API_URL = 'http://192.168.1.14:5000/predict';
+
+            const payload = {
+                House_type: "BYROAD",
+                Legal_documents: "AVAILABLE",
+                No_floor: property.floors || 1,
+                No_bedroom: property.bedrooms || 1,
+                Month: new Date().getMonth() + 1,
+                Day_Of_Week: "Monday",
+                District: "CẦU GIẤY",
+                Ward: "PHƯỜNG CẦU GIẤY",
+                Area: property.area || 50,
+                Width: property.width || 5,
+                Length: property.length || 10,
+            };
+
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            const json = await response.json();
+
+            if (json.status === 'success') {
+                setAiPrediction(json.predicted_price_range);
+            } else {
+                Alert.alert("AI Error", json.message);
+            }
+        } catch (error) {
+            console.error("AI Connection Error:", error);
+        } finally {
+            setIsAiLoading(false);
+        }
+    };
+
     useEffect(() => {
         fetchData();
     }, [id]);
+
+    useEffect(() => {
+        if (property && !aiPrediction) {
+            fetchAIValuation();
+        }
+    }, [property]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -140,7 +203,6 @@ const ReviewPropertyDetailScreen = () => {
     const handleUploadImages = async () => {
         if (newImages.length === 0) return;
         if (!user) return;
-
         setIsUploading(true);
         try {
             const uploadPromises = newImages.map(async (asset) => {
@@ -171,18 +233,7 @@ const ReviewPropertyDetailScreen = () => {
                  return;
              }
              await finalizeVerification(id, decision, form.rejectionReason, price);
-
-             Alert.alert(
-                 "Thành công",
-                 `Đã cập nhật trạng thái!`,
-                 [
-                     {
-                         text: "Về Tin Của Tôi",
-                         onPress: goBackToMyListings // <--- Chuyển hướng về Tin Của Tôi
-                     }
-                 ]
-             );
-
+             Alert.alert("Thành công", `Đã cập nhật trạng thái!`, [{ text: "Về Tin Của Tôi", onPress: goBackToMyListings }]);
         } catch(e) {
             Alert.alert("Lỗi", "Thất bại.");
         } finally {
@@ -205,19 +256,13 @@ const ReviewPropertyDetailScreen = () => {
 
             {/* Header */}
             <View className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100 z-10">
-                {/* --- SỬA NÚT BACK --- */}
-                <TouchableOpacity
-                    onPress={goBackToMyListings}
-                    className="p-2 mr-2 bg-gray-50 rounded-full"
-                >
+                <TouchableOpacity onPress={goBackToMyListings} className="p-2 mr-2 bg-gray-50 rounded-full">
                     <Ionicons name="arrow-back" size={20} color="#333" />
                 </TouchableOpacity>
-
                 <View className="flex-1">
                     <Text className="text-lg font-rubik-bold text-gray-800" numberOfLines={1}>Thẩm định BĐS</Text>
                     <Text className="text-xs text-gray-500" numberOfLines={1}>{property.name}</Text>
                 </View>
-
                 <View className={`px-2 py-1 rounded-md ${property.status === 'approved' ? 'bg-green-100' : 'bg-yellow-100'}`}>
                      <Text className={`text-[10px] font-bold uppercase ${property.status === 'approved' ? 'text-green-700' : 'text-yellow-700'}`}>
                         {property.status}
@@ -230,7 +275,7 @@ const ReviewPropertyDetailScreen = () => {
                 contentContainerStyle={{ paddingBottom: 100 }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
-                {/* --- SLIDER ẢNH --- */}
+                {/* Image Slider */}
                 <View className="bg-black">
                     <Image
                         source={{ uri: totalDisplayImages[activeImageIndex] || 'https://via.placeholder.com/400' }}
@@ -269,7 +314,6 @@ const ReviewPropertyDetailScreen = () => {
                     <Text className="text-2xl font-rubik-bold text-blue-600 mb-3">
                         {property.price?.toLocaleString('vi-VN')} ₫
                     </Text>
-
                     <View className="flex-row bg-gray-50 p-3 rounded-xl justify-between border border-gray-100">
                         <View className="flex-row items-center"><MaterialCommunityIcons name="floor-plan" size={20} color="#555" /><Text className="ml-2 font-medium">{property.area} m²</Text></View>
                         <View className="flex-row items-center"><Ionicons name="bed-outline" size={20} color="#555" /><Text className="ml-2 font-medium">{property.bedrooms} PN</Text></View>
@@ -277,10 +321,9 @@ const ReviewPropertyDetailScreen = () => {
                     </View>
                 </View>
 
-                {/* --- PHÁP LÝ & CHỦ NHÀ --- */}
+                {/* PHÁP LÝ */}
                 <View className="bg-white p-5 mb-3 shadow-sm">
                     <Text className="text-lg font-rubik-bold text-gray-800 mb-4 border-l-4 border-blue-500 pl-3">Kiểm Tra Pháp Lý</Text>
-
                     <View className="flex-row items-center bg-blue-50 p-4 rounded-xl mb-4 border border-blue-100">
                         {sellerAvatar ? (
                              <Image source={{ uri: sellerAvatar }} className="w-12 h-12 rounded-full" />
@@ -296,36 +339,115 @@ const ReviewPropertyDetailScreen = () => {
                         <TouchableOpacity className="bg-white p-2 rounded-full border border-blue-100">
                              <Ionicons name="call-outline" size={20} color="#0061FF" />
                         </TouchableOpacity>
-                        <TouchableOpacity
-                                onPress={handleChatWithSeller} // <--- Gán hàm vào đây
-                                className="bg-white p-2 rounded-full border border-blue-100 ml-2"
-                            >
+                        <TouchableOpacity onPress={handleChatWithSeller} className="bg-white p-2 rounded-full border border-blue-100 ml-2">
                                  <Ionicons name="chatbubble-ellipses-outline" size={20} color="#0061FF" />
                         </TouchableOpacity>
                     </View>
-
                     <CheckboxItem checked={form.isLegalChecked} label="Đã kiểm tra Sổ đỏ / Giấy tờ" onPress={() => updateForm('isLegalChecked', !form.isLegalChecked)}/>
                     <CheckboxItem checked={form.isKycChecked} label="Đã xác thực chủ nhà (KYC)" onPress={() => updateForm('isKycChecked', !form.isKycChecked)}/>
                 </View>
 
-                {/* ĐỊNH GIÁ */}
+                {/* THẨM ĐỊNH GIÁ */}
                 <View className="bg-white p-5 mb-6 shadow-sm">
                     <Text className="text-lg font-rubik-bold text-gray-800 mb-4 border-l-4 border-blue-500 pl-3">Thẩm Định Giá</Text>
-                    <TextInput
-                        value={form.proposedPrice}
-                        onChangeText={(t) => updateForm('proposedPrice', t)}
-                        keyboardType="numeric"
-                        placeholder="Nhập giá định giá (VNĐ)..."
-                        className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4 text-black font-medium"
-                    />
-                    <TextInput
-                        value={form.rejectionReason}
-                        onChangeText={(t) => updateForm('rejectionReason', t)}
-                        placeholder="Ghi chú nghiệp vụ / Lý do từ chối..."
-                        multiline
-                        className="bg-gray-50 border border-gray-200 rounded-xl p-4 h-28 text-black"
-                        textAlignVertical="top"
-                    />
+
+                    {/* 1. AI SUGGESTION CARD */}
+                    <View className="bg-indigo-50 rounded-xl p-4 mb-5 border border-indigo-100 relative overflow-hidden">
+                        <View className="absolute -right-4 -top-4 w-20 h-20 bg-indigo-100 rounded-full opacity-50" />
+                        <View className="flex-row items-center justify-between mb-2">
+                            <View className="flex-row items-center">
+                                <MaterialCommunityIcons name="robot-excited-outline" size={20} color="#4F46E5" />
+                                <Text className="text-indigo-700 font-bold ml-2 text-sm uppercase tracking-wide">AI Gợi ý định giá</Text>
+                            </View>
+                            <TouchableOpacity onPress={fetchAIValuation} disabled={isAiLoading}>
+                                {isAiLoading ? <ActivityIndicator size="small" color="#4F46E5" /> : <Ionicons name="refresh-circle" size={24} color="#4F46E5" />}
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* HIỂN THỊ KẾT QUẢ AI - ĐÃ SỬA LỖI JSX */}
+                        {aiPrediction ? (
+                            <>
+                                <View className="flex-row items-end justify-between">
+                                    <View>
+                                        <Text className="text-gray-500 text-xs mb-1">Khoảng giá khuyến nghị (Tổng):</Text>
+                                        <Text className="text-xl font-rubik-bold text-indigo-900">
+                                            {(aiMinTotal / 1000000000).toFixed(2)} - {(aiMaxTotal / 1000000000).toFixed(2)}
+                                            <Text className="text-sm font-normal text-indigo-600"> tỷ</Text>
+                                        </Text>
+                                        <Text className="text-[10px] text-indigo-400 mt-1">(Đơn giá: {aiPrediction} triệu/m²)</Text>
+                                    </View>
+
+                                    <View className={`px-3 py-1.5 rounded-lg ${isGoodPrice ? 'bg-green-100' : isCheaper ? 'bg-blue-100' : 'bg-orange-100'}`}>
+                                        <Text className={`text-xs font-bold ${isGoodPrice ? 'text-green-700' : isCheaper ? 'text-blue-700' : 'text-orange-700'}`}>
+                                            {isGoodPrice ? 'Giá Hợp Lý' : isCheaper ? 'Rẻ Hơn AI' : 'Cao Hơn AI'}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View className="mt-4">
+                                    <View className="flex-row justify-between mb-1">
+                                        <Text className="text-[10px] text-gray-400">0</Text>
+                                        <Text className="text-[10px] text-indigo-500 font-bold">Chủ Nhà: {(currentPrice/1000000000).toFixed(2)} tỷ</Text>
+                                        <Text className="text-[10px] text-gray-400">Max</Text>
+                                    </View>
+                                    <View className="h-3 bg-gray-200 rounded-full overflow-hidden relative">
+                                        <View className="absolute h-full bg-indigo-300 opacity-60" style={{ left: '30%', width: '40%' }} />
+                                        <View className={`absolute h-full w-1.5 ${isGoodPrice ? 'bg-green-500' : 'bg-red-500'}`} style={{ left: isCheaper ? '20%' : isExpensive ? '80%' : '50%' }} />
+                                    </View>
+                                </View>
+                            </>
+                        ) : (
+                            <View className="py-4 items-center justify-center">
+                                {isAiLoading ? (
+                                    <Text className="text-indigo-400 text-sm">Đang phân tích dữ liệu...</Text>
+                                ) : (
+                                    <View className="items-center">
+                                        <Text className="text-gray-400 text-sm mb-2">Không thể nhận diện giá</Text>
+                                        <TouchableOpacity onPress={fetchAIValuation} className="bg-indigo-100 px-3 py-1 rounded-md">
+                                            <Text className="text-indigo-600 text-xs font-bold">Thử lại</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+                    </View>
+
+                    {/* 2. BROKER INPUT */}
+                    <View className="mb-4">
+                        <Text className="text-gray-500 mb-2 text-xs uppercase font-bold">Quyết định của Broker</Text>
+                        <View className="flex-row items-center justify-between bg-white border border-gray-300 rounded-xl p-1 shadow-sm">
+                            <View className="p-3 flex-1 border-r border-gray-100 bg-gray-50 rounded-l-lg">
+                                 <Text className="text-[10px] text-gray-400 uppercase">Giá niêm yết</Text>
+                                 <Text className="font-bold text-gray-700 text-sm mt-0.5">{(property.price / 1000000000).toFixed(2)} tỷ</Text>
+                            </View>
+                            <View className="flex-[1.8] flex-row items-center px-3 py-2">
+                                <View className="flex-1">
+                                    <Text className="text-[10px] text-blue-500 font-bold mb-0.5">GIÁ CHỐT DUYỆT</Text>
+                                    <TextInput
+                                        value={form.proposedPrice}
+                                        onChangeText={(t) => updateForm('proposedPrice', t)}
+                                        keyboardType="numeric"
+                                        placeholder="Nhập giá..."
+                                        className="font-rubik-bold text-blue-700 text-xl p-0 m-0 h-8"
+                                    />
+                                </View>
+                                <Text className="ml-1 text-gray-400 font-medium text-xs">VNĐ</Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* 3. GHI CHÚ */}
+                    <View className="relative">
+                        <Text className="absolute left-3 top-3 text-xs text-gray-400 z-10 bg-gray-50 px-1">Ghi chú duyệt tin</Text>
+                        <TextInput
+                            value={form.rejectionReason}
+                            onChangeText={(t) => updateForm('rejectionReason', t)}
+                            placeholder="Nhập lý do từ chối hoặc ghi chú nghiệp vụ..."
+                            multiline
+                            className="bg-gray-50 border border-gray-200 rounded-xl p-4 pt-7 h-32 text-gray-800 text-sm leading-5"
+                            textAlignVertical="top"
+                        />
+                    </View>
                 </View>
             </ScrollView>
 
