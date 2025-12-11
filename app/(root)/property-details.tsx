@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import PriceHistory from "@/components/PriceHistory";
 import icons from "@/constants/icons";
 import { getAgentById } from "@/lib/api/broker";
 import { getPropertyById } from "@/lib/api/buyer";
@@ -23,23 +24,37 @@ import { deleteProperty, getPropertyGallery } from "@/lib/api/seller";
 import { useGlobalContext } from "@/lib/global-provider";
 import { useAppwrite } from "@/lib/useAppwrite";
 import { Models } from "react-native-appwrite";
-import PriceHistory from "@/components/PriceHistory";
 
 const REGIONS = {
     AnGiang: "An Giang", BaRiaVungTau: "Bà Rịa - Vũng Tàu", BacGiang: "Bắc Giang", BacKan: "Bắc Kạn", BacLieu: "Bạc Liêu", BacNinh: "Bắc Ninh", BenTre: "Bến Tre", BinhDinh: "Bình Định", BinhDuong: "Bình Dương", BinhPhuoc: "Bình Phước", BinhThuan: "Bình Thuận", CaMau: "Cà Mau", CanTho: "Cần Thơ", CaoBang: "Cao Bằng", DaNang: "Đà Nẵng", DakLak: "Đắk Lắk", DakNong: "Đắk Nông", DienBien: "Điện Biên", DongNai: "Đồng Nai", DongThap: "Đồng Tháp", GiaLai: "Gia Lai", HaGiang: "Hà Giang", HaNam: "Hà Nam", HaNoi: "Hà Nội", HaTinh: "Hà Tĩnh", HaiDuong: "Hải Dương", HaiPhong: "Hải Phòng", HauGiang: "Hậu Giang", HoaBinh: "Hòa Bình", HungYen: "Hưng Yên", KhanhHoa: "Khánh Hòa", KienGiang: "Kiên Giang", KonTum: "Kon Tum", LaiChau: "Lai Châu", LamDong: "Lâm Đồng", LangSon: "Lạng Sơn", LaoCai: "Lào Cai", LongAn: "Long An", NamDinh: "Nam Định", NgheAn: "Nghệ An", NinhBinh: "Ninh Bình", NinhThuan: "Ninh Thuận", PhuTho: "Phú Thọ", PhuYen: "Phú Yên", QuangBinh: "Quảng Bình", QuangNam: "Quảng Nam", QuangNgai: "Quảng Ngãi", QuangNinh: "Quảng Ninh", QuangTri: "Quảng Trị", SocTrang: "Sóc Trăng", SonLa: "Sơn La", TayNinh: "Tây Ninh", ThaiBinh: "Thái Bình", ThaiNguyen: "Thái Nguyên", ThanhHoa: "Thanh Hóa", ThuaThienHue: "Thừa Thiên Huế", TienGiang: "Tiền Giang", TPHCM: "TP. Hồ Chí Minh", TraVinh: "Trà Vinh", TuyenQuang: "Tuyên Quang", VinhLong: "Vĩnh Long", VinhPhuc: "Vĩnh Phúc", YenBai: "Yên Bái"
 };
 type RegionKey = keyof typeof REGIONS;
 
-type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';
+type PropertyStatus = 'pending_approval' | 'reviewing' | 'approved' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'available';
 
-const formatStatus = (status: PropertyStatus) => {
+const DIRECTIONS: Record<string, string> = {
+    'North': 'Bắc',
+    'South': 'Nam',
+    'East': 'Đông',
+    'West': 'Tây',
+    'Northeast': 'Đông Bắc',
+    'Northwest': 'Tây Bắc',
+    'Southeast': 'Đông Nam',
+    'Southwest': 'Tây Nam',
+    'Multiple': 'Nhiều hướng',
+    'Others': 'Khác'
+};
+
+const formatStatus = (status: PropertyStatus, brokerName?: string) => {
     const statuses: Record<PropertyStatus, string> = {
         'pending_approval': 'Chờ duyệt',
-        'for_sale': 'Đang bán',
+        'reviewing': 'Đang xem xét',
+        'approved': 'Đã duyệt',
         'deposit_paid': 'Đã cọc',
         'sold': 'Đã bán',
         'rejected': 'Bị từ chối',
-        'expired': 'Hết hạn'
+        'expired': 'Hết hạn',
+        'available': brokerName ? `Môi giới ${brokerName} nhận duyệt` : 'Chờ môi giới nhận'
     };
     return statuses[status] || status;
 };
@@ -47,13 +62,41 @@ const formatStatus = (status: PropertyStatus) => {
 const getStatusColor = (status: PropertyStatus) => {
     const colors: Record<PropertyStatus, string> = {
         'pending_approval': '#f0ad4e',
-        'for_sale': '#5cb85c',
+        'reviewing': '#17a2b8',
+        'approved': '#5cb85c',
         'deposit_paid': '#337ab7',
         'sold': '#d9534f',
         'rejected': '#777',
-        'expired': '#777'
+        'expired': '#777',
+        'available': '#9c27b0' // Màu tím cho trạng thái available
     };
     return colors[status] || '#777';
+};
+
+const formatPrice = (price: number): string => {
+    if (price >= 1000000000) {
+        // >= 1 tỷ
+        const ty = price / 1000000000;
+        if (ty % 1 === 0) {
+            return `${ty} tỷ`;
+        }
+        return `${ty.toFixed(1)} tỷ`;
+    } else if (price >= 1000000) {
+        // >= 1 triệu
+        const trieu = price / 1000000;
+        if (trieu % 1 === 0) {
+            return `${trieu} triệu`;
+        }
+        return `${trieu.toFixed(1)} triệu`;
+    } else if (price >= 1000) {
+        // >= 1 nghìn
+        const nghin = price / 1000;
+        if (nghin % 1 === 0) {
+            return `${nghin} nghìn`;
+        }
+        return `${nghin.toFixed(1)} nghìn`;
+    }
+    return `${price.toLocaleString('vi-VN')} VND`;
 };
 
 const PropertyDetails = () => {
@@ -109,8 +152,9 @@ const PropertyDetails = () => {
     };
 
     // **FIX: Sửa lại logic kiểm tra quyền sở hữu và quyền chỉnh sửa**
+    // Người bán có thể chỉnh sửa/xóa khi: chờ môi giới nhận (available), chờ duyệt (pending_approval), đang xem xét (reviewing), hoặc bị từ chối (rejected)
     const isOwner = user && property && user.$id === property.seller?.$id;
-    const canEditOrDelete = isOwner && ['pending_approval', 'rejected'].includes(property.status);
+    const canEditOrDelete = isOwner && ['available', 'pending_approval', 'reviewing', 'rejected'].includes(property.status);
 
     if (loadingProperty || !property) {
         return <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><ActivityIndicator size="large" /></View>;
@@ -150,13 +194,18 @@ const PropertyDetails = () => {
 
                 <View className="px-5 mt-7 flex gap-2">
                     <Text className="text-2xl font-rubik-extrabold">{property.name}</Text>
-                    <Text style={styles.priceText}>{property.price.toLocaleString('vi-VN')} VNĐ</Text>
+                    <Text style={styles.priceText}>{formatPrice(property.price)}</Text>
                     
                     <View className="flex-row items-center gap-3 flex-wrap mt-2">
                         <View className="flex-row items-center px-4 py-2 bg-primary-100 rounded-full"><Text className="text-xs font-rubik-bold text-primary-300">{property.type}</Text></View>
                         {property.status && (
                             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(property.status as PropertyStatus) }]}>
-                                <Text style={styles.statusText}>{formatStatus(property.status as PropertyStatus)}</Text>
+                                <Text style={styles.statusText}>
+                                    {formatStatus(
+                                        property.status as PropertyStatus,
+                                        property.broker?.name || property.assignedBroker?.name || undefined
+                                    )}
+                                </Text>
                             </View>
                         )}
                         <View className="flex-row items-center gap-2"><Image source={icons.star} className="size-5" /><Text className="text-black-200 text-sm mt-1 font-rubik-medium">{property.rating} ({property.reviews?.length ?? 0} đánh giá)</Text></View>
@@ -228,6 +277,8 @@ const PropertyDetails = () => {
 
                     {/* Thông tin chi tiết */}
                     <View style={styles.detailsCard}>
+                        <Text style={styles.sectionTitle}>📋 Thông tin cơ bản</Text>
+                        
                         <View style={styles.detailRow}>
                             <View style={styles.detailItem}>
                                 <View style={styles.iconCircle}>
@@ -248,6 +299,7 @@ const PropertyDetails = () => {
                                 </View>
                             </View>
                         </View>
+                        
                         <View style={styles.detailRow}>
                             <View style={styles.detailItem}>
                                 <View style={styles.iconCircle}>
@@ -268,7 +320,110 @@ const PropertyDetails = () => {
                                 </View>
                             </View>
                         </View>
+                        
+                        {property.direction && (
+                            <View style={styles.detailRow}>
+                                <View style={[styles.detailItem, { flex: 1 }]}>
+                                    <View style={styles.iconCircle}>
+                                        <Text style={styles.iconText}>🧭</Text>
+                                    </View>
+                                    <View style={styles.detailTextContainer}>
+                                        <Text style={styles.detailLabel}>Hướng</Text>
+                                        <Text style={styles.detailValue}>{DIRECTIONS[property.direction] || property.direction}</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Phường / Xã */}
+                        {property.ward && (
+                            <View style={styles.detailRow}>
+                                <View style={[styles.detailItem, { flex: 1 }]}>
+                                    <View style={styles.iconCircle}>
+                                        <Image source={icons.location} className="size-5" />
+                                    </View>
+                                    <View style={styles.detailTextContainer}>
+                                        <Text style={styles.detailLabel}>Phường / Xã</Text>
+                                        <Text style={styles.detailValue} numberOfLines={1}>{property.ward}</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Địa chỉ chi tiết */}
+                        {property.address && (
+                            <View style={styles.addressContainer}>
+                                <Text style={styles.addressLabel}>📍 Địa chỉ</Text>
+                                <Text style={styles.addressText}>{property.address}</Text>
+                            </View>
+                        )}
                     </View>
+
+                    {/* Thông tin chi tiết cho nhà (không phải chung cư) */}
+                    {['House', 'Townhouse', 'Duplex', 'Villa'].includes(property.type) && (
+                        <View style={styles.detailsCard}>
+                            <Text style={styles.sectionTitle}>🏠 Thông tin nhà</Text>
+                            
+                            {(property.floors || property.frontage || property.depth || property.roadWidth) ? (
+                                <>
+                                    {property.floors && (
+                                        <View style={styles.detailRow}>
+                                            <View style={[styles.detailItem, { flex: 1 }]}>
+                                                <View style={styles.iconCircle}>
+                                                    <Text style={styles.iconText}>🏗️</Text>
+                                                </View>
+                                                <View style={styles.detailTextContainer}>
+                                                    <Text style={styles.detailLabel}>Số tầng</Text>
+                                                    <Text style={styles.detailValue}>{property.floors} tầng</Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    )}
+
+                                    <View style={styles.detailRow}>
+                                        {property.frontage && (
+                                            <View style={styles.detailItem}>
+                                                <View style={styles.iconCircle}>
+                                                    <Text style={styles.iconText}>📏</Text>
+                                                </View>
+                                                <View style={styles.detailTextContainer}>
+                                                    <Text style={styles.detailLabel}>Mặt tiền</Text>
+                                                    <Text style={styles.detailValue}>{property.frontage} m</Text>
+                                                </View>
+                                            </View>
+                                        )}
+                                        {property.depth && (
+                                            <View style={styles.detailItem}>
+                                                <View style={styles.iconCircle}>
+                                                    <Text style={styles.iconText}>📐</Text>
+                                                </View>
+                                                <View style={styles.detailTextContainer}>
+                                                    <Text style={styles.detailLabel}>Chiều sâu</Text>
+                                                    <Text style={styles.detailValue}>{property.depth} m</Text>
+                                                </View>
+                                            </View>
+                                        )}
+                                    </View>
+
+                                    {property.roadWidth && (
+                                        <View style={styles.detailRow}>
+                                            <View style={[styles.detailItem, { flex: 1 }]}>
+                                                <View style={styles.iconCircle}>
+                                                    <Text style={styles.iconText}>🛣️</Text>
+                                                </View>
+                                                <View style={styles.detailTextContainer}>
+                                                    <Text style={styles.detailLabel}>Đường trước nhà</Text>
+                                                    <Text style={styles.detailValue}>{property.roadWidth} m</Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    )}
+                                </>
+                            ) : (
+                                <Text style={styles.noDataText}>Chưa có thông tin chi tiết về nhà</Text>
+                            )}
+                        </View>
+                    )}
 
                     <View style={styles.descriptionCard}>
                         <Text style={styles.sectionTitle}>📝 Tổng quan</Text>
@@ -582,6 +737,35 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#e0e0e0',
+    },
+    addressContainer: {
+        marginTop: 12,
+        padding: 12,
+        backgroundColor: '#f8f9fa',
+        borderRadius: 8,
+        borderLeftWidth: 3,
+        borderLeftColor: '#007BFF',
+    },
+    addressLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#666',
+        marginBottom: 6,
+    },
+    addressText: {
+        fontSize: 15,
+        color: '#333',
+        lineHeight: 22,
+    },
+    iconText: {
+        fontSize: 20,
+    },
+    noDataText: {
+        fontSize: 14,
+        color: '#999',
+        fontStyle: 'italic',
+        textAlign: 'center',
+        paddingVertical: 16,
     },
 });
 

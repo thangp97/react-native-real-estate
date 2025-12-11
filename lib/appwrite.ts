@@ -104,12 +104,15 @@ export async function getCurrentUser() {
         const currentAccount = await account.get();
         if (!currentAccount) return null;
 
+        // Lấy profile từ profiles collection theo userId (so sánh theo email thông qua userId)
         const userProfile = await databases.getDocument(config.databaseId!, config.profilesCollectionId!, currentAccount.$id);
         
         return { 
-            ...currentAccount, 
+            $id: currentAccount.$id,
+            email: currentAccount.email, // Email từ Account
+            name: userProfile.name || currentAccount.name, // Lấy name từ profiles collection, fallback về Account nếu không có
             role: userProfile.role,
-            avatar: userProfile.avatar,
+            avatar: userProfile.avatar || currentAccount.avatar,
             credits: userProfile.credits // **LẤY CREDITS**
         };
 
@@ -147,11 +150,16 @@ export async function updateUserProfile(userId: string, data: object) {
 }
 
 export async function uploadFile(file: any) {
-    if (!file) return;
+    if (!file) return null;
 
     try {
-        const { mimeType, ...rest } = file;
-        const asset = { type: mimeType, ...rest };
+        // Xử lý file từ ImagePicker
+        const asset: any = {
+            name: file.fileName || file.name || `${ID.unique()}.jpg`,
+            type: file.mimeType || file.type || 'image/jpeg',
+            size: file.fileSize || file.size || 0,
+            uri: file.uri
+        };
 
         const uploadedFile = await storage.createFile(
             config.storageId!,
@@ -159,15 +167,17 @@ export async function uploadFile(file: any) {
             asset
         );
 
-        const fileUrl = await storage.getFileView(
-            config.storageId!,
-            uploadedFile.$id
-        );
+        if (!uploadedFile || !uploadedFile.$id) {
+            throw new Error("Không thể tạo file trên server.");
+        }
+
+        // Tạo URL view cho file
+        const fileUrl = `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
 
         return fileUrl;
-    } catch (error) {
+    } catch (error: any) {
         console.error("Lỗi upload file:", error);
-        throw error;
+        throw new Error(error.message || "Không thể tải file lên server.");
     }
 }
 
@@ -193,5 +203,25 @@ export async function updateCredit(userId: string, amount: number) {
     } catch (error) {
         console.error('Lỗi cập nhật credits:', error);
         throw error;
+    }
+}
+
+export async function updatePassword(oldPassword: string, newPassword: string) {
+    try {
+        // Cập nhật mật khẩu trong Appwrite Account
+        await account.updatePassword(newPassword, oldPassword);
+        return true;
+    } catch (error: any) {
+        console.error('Lỗi đổi mật khẩu:', error);
+        if (error instanceof AppwriteException) {
+            if (error.code === 401) {
+                throw new Error("Mật khẩu cũ không chính xác.");
+            } else if (error.code === 400) {
+                if (error.message.includes('Password')) {
+                    throw new Error("Mật khẩu mới phải có ít nhất 8 ký tự.");
+                }
+            }
+        }
+        throw new Error(error.message || "Không thể đổi mật khẩu. Vui lòng thử lại.");
     }
 }
