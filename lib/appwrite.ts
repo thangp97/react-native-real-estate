@@ -13,9 +13,8 @@ export const config = {
     galleriesCollectionId: 'galleries',
     bookingsCollectionId: 'bookings',
     notificationsCollectionId: 'notifications',
-    chatsCollectionId: 'ID_CUA_BANG_CHATS', // <--- Thay ID thật vào đây
     messagesCollectionId: 'messages',
-    chatsCollectionId: 'chats'
+    chatsCollectionId: 'chats',
 }
 
 export const client = new Client();

@@ -9,6 +9,8 @@ import { getPropertyById, finalizeVerification, getPropertyGallery, uploadFieldI
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { upload360Image, saveTourToProperty } from '@/lib/api/tour360'; // File bạn vừa làm xong
+import ThreeSixtyViewer from '@/components/ThreeSixtyViewer'; // File vừa tạo ở Bước 1
 
 const CheckboxItem = ({ checked, label, onPress }: { checked: boolean; label: string; onPress: () => void; }) => (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} className="flex-row items-center py-3">
@@ -139,16 +141,18 @@ const ReviewPropertyDetailScreen = () => {
             const payload = {
                 House_type: "BYROAD",
                 Legal_documents: "AVAILABLE",
-                No_floor: property.floors || 1,
+                No_floor: property.floors,
                 No_bedroom: property.bedrooms || 1,
                 Month: new Date().getMonth() + 1,
                 Day_Of_Week: "Monday",
-                District: "CẦU GIẤY",
-                Ward: "PHƯỜNG CẦU GIẤY",
-                Area: property.area || 50,
-                Width: property.width || 5,
-                Length: property.length || 10,
+                District: property.ward,
+                Ward: property.ward,
+                Area: property.area,
+                Width: property.frontage,
+                Length: property.depth,
             };
+
+            console.log("[AI DEBUG] Payload gửi đi:", JSON.stringify(payload, null, 2));
 
             const response = await fetch(API_URL, {
                 method: 'POST',
