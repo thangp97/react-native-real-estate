@@ -380,10 +380,25 @@ const Property = () => {
              return;
         }
 
-        // Kiểm tra xem brokerId là object hay string để lấy ID chính xác
         let targetAgentId = DEFAULT_BROKER_ID;
-        if (property?.brokerId) {
-            targetAgentId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
+        let successMessage = `Yêu cầu đặt lịch đã được gửi. ${currentBroker.name} sẽ liên hệ xác nhận với bạn.`;
+
+        // Logic Booking cho Broker -> Book lịch với SELLER
+        if (user.role === 'broker') {
+             // Lấy Seller ID (Chủ nhà)
+             const sellerId = property?.sellerInfo?.$id || (typeof property?.seller === 'object' ? property?.seller?.$id : property?.seller);
+             
+             if (sellerId && sellerId !== 'unknown') {
+                 targetAgentId = sellerId;
+                 successMessage = "Yêu cầu đặt lịch với Chủ nhà đã được gửi. Chủ nhà sẽ nhận được thông báo.";
+             } else {
+                 console.warn("Không tìm thấy ID chủ nhà, fallback về Broker mặc định");
+             }
+        } else {
+            // Logic cũ cho Buyer -> Book lịch với BROKER
+            if (property?.brokerId) {
+                targetAgentId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
+            }
         }
 
         setIsBooking(true);
@@ -396,7 +411,7 @@ const Property = () => {
                 note: bookingNote
             });
 
-            Alert.alert("Thành công", `Yêu cầu đặt lịch đã được gửi. ${currentBroker.name} sẽ liên hệ xác nhận với bạn.`);
+            Alert.alert("Thành công", successMessage);
             setBookingModalVisible(false);
             setBookingNote('');
         } catch (error: any) {

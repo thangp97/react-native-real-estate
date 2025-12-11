@@ -85,6 +85,14 @@ const TabsLayout = () => {
                     }}
                 />
                 <Tabs.Screen
+                    name="dashboard-chat"
+                    options={{
+                        title: 'Tin nhắn',
+                        headerShown: false,
+                        tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
+                    }}
+                />
+                <Tabs.Screen
                     name="seller-notifications"
                     options={{
                         title: 'Thông báo',
@@ -98,14 +106,6 @@ const TabsLayout = () => {
                         title: 'Hồ Sơ',
                         headerShown: false,
                         tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} />
-                    }}
-                />
-                <Tabs.Screen
-                    name="dashboard-chat"
-                    options={{
-                        title: 'Tin nhắn',
-                        headerShown: false,
-                        tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
                     }}
                 />
                 <Tabs.Screen name="my-listings" options={{ href: null }} />

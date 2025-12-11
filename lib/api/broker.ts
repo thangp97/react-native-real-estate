@@ -325,41 +325,12 @@ export async function getBrokerBookings(brokerId: string) {
 
 export async function confirmBooking(bookingId: string) {
     try {
-        // 1. Lấy document hiện tại
-        const doc = await databases.getDocument(
-            config.databaseId!,
-            config.bookingsCollectionId!,
-            bookingId
-        );
-
-        // 2. Helper lấy ID an toàn
-        const getSafeId = (field: any) => {
-            if (!field) return null;
-            if (Array.isArray(field)) return field[0]?.$id || field[0];
-            if (typeof field === 'object' && field.$id) return field.$id;
-            return field;
-        };
-
-        // 3. Chuẩn bị dữ liệu cập nhật
-        const updates: any = {
-            status: 'confirmed', // <--- Trạng thái xác nhận
-            property: getSafeId(doc.property),
-            user: getSafeId(doc.user),
-            agent: getSafeId(doc.agent)
-        };
-
-        // 4. Xóa các trường null
-        Object.keys(updates).forEach(key => updates[key] === null && delete updates[key]);
-
-        // 5. Cập nhật
-        const result = await databases.updateDocument(
+        return await databases.updateDocument(
             config.databaseId!,
             config.bookingsCollectionId!,
             bookingId,
-            updates
+            { status: 'confirmed' }
         );
-        return result;
-
     } catch (error) {
         console.error("Lỗi xác nhận lịch hẹn:", error);
         throw error;
@@ -368,45 +339,15 @@ export async function confirmBooking(bookingId: string) {
 
 /**
  * Môi giới TỪ CHỐI lịch hẹn
- * (Code lặp lại logic xử lý Relationship để an toàn)
  */
 export async function rejectBooking(bookingId: string) {
     try {
-        // 1. Lấy document hiện tại
-        const doc = await databases.getDocument(
-            config.databaseId!,
-            config.bookingsCollectionId!,
-            bookingId
-        );
-
-        // 2. Helper lấy ID an toàn
-        const getSafeId = (field: any) => {
-            if (!field) return null;
-            if (Array.isArray(field)) return field[0]?.$id || field[0];
-            if (typeof field === 'object' && field.$id) return field.$id;
-            return field;
-        };
-
-        // 3. Chuẩn bị dữ liệu cập nhật
-        const updates: any = {
-            status: 'cancelled', // <--- Trạng thái hủy/từ chối
-            property: getSafeId(doc.property),
-            user: getSafeId(doc.user),
-            agent: getSafeId(doc.agent)
-        };
-
-        // 4. Xóa các trường null
-        Object.keys(updates).forEach(key => updates[key] === null && delete updates[key]);
-
-        // 5. Cập nhật
-        const result = await databases.updateDocument(
+        return await databases.updateDocument(
             config.databaseId!,
             config.bookingsCollectionId!,
             bookingId,
-            updates
+            { status: 'cancelled' }
         );
-        return result;
-
     } catch (error) {
         console.error("Lỗi từ chối lịch hẹn:", error);
         throw error;

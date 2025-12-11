@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { confirmBooking, getBrokerBookings, rejectBooking } from '@/lib/api/broker';
 import { cancelBooking, getBuyerBookings } from '@/lib/api/buyer';
+import { confirmBooking as confirmSellerBooking, getSellerBookings, rejectBooking as rejectSellerBooking } from '@/lib/api/seller';
 
 const BookingsScreen = () => {
     const { user } = useGlobalContext();
@@ -16,6 +17,8 @@ const BookingsScreen = () => {
     const [refreshing, setRefreshing] = useState(false);
 
     const isBroker = user?.role === 'broker';
+    const isSeller = user?.role === 'seller';
+
     const fetchBookings = async () => {
             if (!user) return;
             if (!refreshing) setLoading(true);
@@ -23,10 +26,12 @@ const BookingsScreen = () => {
             try {
                 let data = [];
 
-                // Check Role trước -> Gọi hàm tương ứng
                 if (isBroker) {
                     console.log("Fetching Broker bookings...");
                     data = await getBrokerBookings(user.$id);
+                } else if (isSeller) {
+                    console.log("Fetching Seller bookings...");
+                    data = await getSellerBookings(user.$id);
                 } else {
                     console.log("Fetching Buyer bookings...");
                     data = await getBuyerBookings(user.$id);
@@ -39,7 +44,6 @@ const BookingsScreen = () => {
                 setLoading(false);
             }
         };
-    // 1. Lấy dữ liệu (Tự động lọc theo Role nhờ API)
 
     useEffect(() => {
         fetchBookings();
@@ -75,9 +79,8 @@ const BookingsScreen = () => {
         ]);
     };
 
-    // 2. Xử lý Broker: SỬA LỖI NÚT BẤM TẠI ĐÂY
-    const handleBrokerAction = (bookingId: string, actionType: 'confirm' | 'reject') => {
-        // Kiểm tra kỹ chuỗi actionType
+    // 2. Xử lý Broker/Seller: Confirm/Reject
+    const handleReviewAction = (bookingId: string, actionType: 'confirm' | 'reject') => {
         const isConfirm = actionType === 'confirm';
         const actionText = isConfirm ? "Chấp nhận" : "Từ chối";
 
@@ -88,18 +91,18 @@ const BookingsScreen = () => {
                 { text: "Đóng", style: "cancel" },
                 {
                     text: "Xác nhận",
-                    style: isConfirm ? 'default' : 'destructive', // Nút đỏ nếu từ chối, xanh/đen nếu chấp nhận
+                    style: isConfirm ? 'default' : 'destructive',
                     onPress: async () => {
                         try {
-                            if (isConfirm) {
-                                // Gọi API Confirm
-                                await confirmBooking(bookingId);
-                                updateLocalList(bookingId, 'confirmed');
-                            } else {
-                                // Gọi API Reject
-                                await rejectBooking(bookingId);
-                                updateLocalList(bookingId, 'cancelled');
+                            if (isBroker) {
+                                if (isConfirm) await confirmBooking(bookingId);
+                                else await rejectBooking(bookingId);
+                            } else if (isSeller) {
+                                if (isConfirm) await confirmSellerBooking(bookingId);
+                                else await rejectSellerBooking(bookingId);
                             }
+                            
+                            updateLocalList(bookingId, isConfirm ? 'confirmed' : 'cancelled');
                         } catch (e) {
                             Alert.alert("Lỗi", "Thao tác thất bại.");
                         }
@@ -160,8 +163,20 @@ const BookingsScreen = () => {
                     }
                     renderItem={({ item }) => {
                         const property = item.property || {};
-                        const otherPerson = isBroker ? item.user : item.agent;
-                        const otherPersonLabel = isBroker ? "Khách hàng" : "Môi giới";
+                        
+                        let otherPerson = item.agent; // Default for Buyer (shows Broker/Seller)
+                        let otherPersonLabel = "Người nhận";
+
+                        if (isBroker) {
+                            otherPerson = item.user; // Broker shows Buyer
+                            otherPersonLabel = "Khách hàng";
+                        } else if (isSeller) {
+                            otherPerson = item.user; // Seller shows Broker (who booked)
+                            otherPersonLabel = "Môi giới đặt";
+                        } else {
+                            // Buyer view
+                            otherPersonLabel = "Làm việc với";
+                        }
 
                         return (
                             <View className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4">
@@ -206,27 +221,25 @@ const BookingsScreen = () => {
                                 {/* NÚT BẤM */}
                                 {item.status === 'pending' ? (
                                     <View className="pt-2 border-t border-gray-100 flex-row gap-3">
-                                        {isBroker ? (
-                                            // BROKER BUTTONS
+                                        {isBroker || isSeller ? (
+                                            // BROKER & SELLER BUTTONS (Duyệt lịch)
                                             <>
                                                 <TouchableOpacity
-                                                    // QUAN TRỌNG: Truyền đúng chuỗi 'reject'
-                                                    onPress={() => handleBrokerAction(item.$id, 'reject')}
+                                                    onPress={() => handleReviewAction(item.$id, 'reject')}
                                                     className="flex-1 bg-red-50 py-2.5 rounded-lg border border-red-100 items-center"
                                                 >
                                                     <Text className="text-red-600 font-bold text-xs">Từ chối</Text>
                                                 </TouchableOpacity>
 
                                                 <TouchableOpacity
-                                                    // QUAN TRỌNG: Truyền đúng chuỗi 'confirm'
-                                                    onPress={() => handleBrokerAction(item.$id, 'confirm')}
+                                                    onPress={() => handleReviewAction(item.$id, 'confirm')}
                                                     className="flex-1 bg-green-600 py-2.5 rounded-lg shadow-sm items-center"
                                                 >
                                                     <Text className="text-white font-bold text-xs">Chấp nhận</Text>
                                                 </TouchableOpacity>
                                             </>
                                         ) : (
-                                            // BUYER BUTTON
+                                            // BUYER BUTTON (Hủy lịch)
                                             <TouchableOpacity
                                                 onPress={() => handleBuyerCancel(item.$id)}
                                                 className="flex-1 bg-gray-100 py-2.5 rounded-lg items-center"

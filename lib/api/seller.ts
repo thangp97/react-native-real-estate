@@ -258,3 +258,83 @@ export async function acceptProposedPrice({ propertyId, proposedPrice, userId }:
         throw new Error(error.message);
     }
 }
+
+export async function getSellerBookings(sellerId: string) {
+    try {
+        // Seller đóng vai trò là "agent" (người nhận lịch) trong schema bookings
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            [Query.equal('agent', sellerId), Query.orderDesc('date')]
+        );
+
+        const enrichedBookings = await Promise.all(result.documents.map(async (booking: any) => {
+            try {
+                // Lấy thông tin BĐS
+                const propId = typeof booking.property === 'string'
+                    ? booking.property
+                    : booking.property?.$id;
+
+                if (propId) {
+                     // Nếu property thiếu thông tin chi tiết, gọi API lấy lại
+                    const fullProperty = await databases.getDocument(
+                         config.databaseId!,
+                         config.propertiesCollectionId!,
+                         propId
+                    );
+                    if (fullProperty) {
+                        booking.property = fullProperty;
+                    }
+                }
+                
+                // Lấy thông tin người đặt (Môi giới)
+                // Trong trường hợp này booking.user chính là Môi giới
+                 if (booking.user && typeof booking.user === 'string') {
+                    const userProfile = await databases.getDocument(
+                        config.databaseId!,
+                        config.profilesCollectionId!,
+                        booking.user
+                    );
+                    booking.user = userProfile;
+                }
+
+            } catch (err) {
+                console.warn(`[SellerBookings] Không thể lấy chi tiết cho booking ${booking.$id}`, err);
+            }
+            return booking;
+        }));
+
+        return enrichedBookings;
+    } catch (error) {
+        console.error("Lỗi lấy danh sách lịch hẹn cho Seller:", error);
+        return [];
+    }
+}
+
+export async function confirmBooking(bookingId: string) {
+    try {
+        return await databases.updateDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            bookingId,
+            { status: 'confirmed' }
+        );
+    } catch (error) {
+        console.error("Lỗi xác nhận lịch hẹn:", error);
+        throw error;
+    }
+}
+
+export async function rejectBooking(bookingId: string) {
+    try {
+        return await databases.updateDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            bookingId,
+            { status: 'cancelled' }
+        );
+    } catch (error) {
+        console.error("Lỗi từ chối lịch hẹn:", error);
+        throw error;
+    }
+}

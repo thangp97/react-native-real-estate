@@ -1,16 +1,18 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-    View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Image, ActivityIndicator, RefreshControl
+    View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Image, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, Button, Keyboard, TouchableWithoutFeedback
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalContext } from '@/lib/global-provider';
 import { getOrCreateChat } from '@/lib/api/chat';
 import { getPropertyById, finalizeVerification, getPropertyGallery, uploadFieldImage, addImageToGalleryDoc } from '@/lib/api/broker';
+import { createBooking } from '@/lib/api/buyer'; // Import createBooking
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { upload360Image, saveTourToProperty } from '@/lib/api/tour360'; // File bạn vừa làm xong
-import ThreeSixtyViewer from '@/components/ThreeSixtyViewer'; // File vừa tạo ở Bước 1
+import { upload360Image, saveTourToProperty } from '@/lib/api/tour360';
+import ThreeSixtyViewer from '@/components/ThreeSixtyViewer';
+import DateTimePicker from '@react-native-community/datetimepicker'; // Import DateTimePicker
 
 const CheckboxItem = ({ checked, label, onPress }: { checked: boolean; label: string; onPress: () => void; }) => (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} className="flex-row items-center py-3">
@@ -29,6 +31,14 @@ const ReviewPropertyDetailScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Booking States
+    const [bookingModalVisible, setBookingModalVisible] = useState(false);
+    const [bookingNote, setBookingNote] = useState('');
+    const [isBooking, setIsBooking] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
 
     // AI States
     const [aiPrediction, setAiPrediction] = useState<string | null>(null);
@@ -64,12 +74,9 @@ const ReviewPropertyDetailScreen = () => {
         }
     };
 
-    // --- 🟢 SỬA LỖI Ở ĐÂY: TÍNH TOÁN LOGIC TRƯỚC KHI RENDER ---
-    // Tính toán các giá trị AI ngay tại đây, không làm trong JSX
     const { min: aiMinTotal, max: aiMaxTotal } = parsePriceRange(aiPrediction, property?.area || 0);
     const currentPrice = property?.price || 0;
 
-    // Logic so sánh giá
     const isGoodPrice = currentPrice >= aiMinTotal && currentPrice <= aiMaxTotal;
     const isCheaper = currentPrice < aiMinTotal;
     const isExpensive = currentPrice > aiMaxTotal;
@@ -100,6 +107,66 @@ const ReviewPropertyDetailScreen = () => {
             });
         } catch (error) {
             Alert.alert("Lỗi", "Không thể mở hộp thoại chat.");
+        }
+    };
+
+    // --- BOOKING LOGIC ---
+    const onChangeDate = (event: any, date?: Date) => {
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
+        if (date) {
+            setSelectedDate(date);
+        }
+    };
+
+    const showMode = (currentMode: 'date' | 'time') => {
+        setShowDatePicker(true);
+        setDatePickerMode(currentMode);
+    };
+
+    const handleBookViewing = async () => {
+        if (!user) {
+             Alert.alert("Thông báo", "Vui lòng đăng nhập.");
+             return;
+        }
+
+        const sellerData = property.sellerInfo || property.seller;
+        
+        let targetAgentId = null;
+        
+        // Ưu tiên lấy ID từ object nếu có
+        if (sellerData && typeof sellerData === 'object' && sellerData.$id) {
+            targetAgentId = sellerData.$id;
+        } 
+        // Nếu là string (ID trực tiếp)
+        else if (typeof sellerData === 'string') {
+            targetAgentId = sellerData;
+        }
+
+        if (!targetAgentId) {
+             Alert.alert("Lỗi", "Không tìm thấy thông tin chủ nhà để đặt lịch.");
+             return;
+        }
+
+        setIsBooking(true);
+        try {
+            await createBooking({
+                userId: user.$id,
+                agentId: targetAgentId, // Gửi tới Seller
+                propertyId: id,
+                date: selectedDate.toISOString(),
+                note: bookingNote
+            });
+
+            Alert.alert("Thành công", "Đã gửi yêu cầu đặt lịch xem nhà tới Chủ nhà.");
+            setBookingModalVisible(false);
+            setBookingNote('');
+        } catch (error: any) {
+            console.error("Booking error:", error);
+            Alert.alert("Lỗi", "Không thể đặt lịch. Vui lòng thử lại.");
+        } finally {
+            setIsBooking(false);
         }
     };
 
@@ -135,7 +202,6 @@ const ReviewPropertyDetailScreen = () => {
         if (!property) return;
         setIsAiLoading(true);
         try {
-            // Thay đổi IP này cho đúng máy của bạn
             const API_URL = 'http://192.168.1.14:5000/predict';
 
             const payload = {
@@ -151,8 +217,6 @@ const ReviewPropertyDetailScreen = () => {
                 Width: property.frontage,
                 Length: property.depth,
             };
-
-            console.log("[AI DEBUG] Payload gửi đi:", JSON.stringify(payload, null, 2));
 
             const response = await fetch(API_URL, {
                 method: 'POST',
@@ -325,7 +389,7 @@ const ReviewPropertyDetailScreen = () => {
                     </View>
                 </View>
 
-                {/* PHÁP LÝ */}
+                {/* PHÁP LÝ & LIÊN HỆ */}
                 <View className="bg-white p-5 mb-3 shadow-sm">
                     <Text className="text-lg font-rubik-bold text-gray-800 mb-4 border-l-4 border-blue-500 pl-3">Kiểm Tra Pháp Lý</Text>
                     <View className="flex-row items-center bg-blue-50 p-4 rounded-xl mb-4 border border-blue-100">
@@ -340,7 +404,10 @@ const ReviewPropertyDetailScreen = () => {
                             <Text className="text-xs text-gray-500 uppercase font-bold tracking-wider">Chủ nhà / Người bán</Text>
                             <Text className="text-gray-900 font-bold text-base mt-0.5">{sellerName}</Text>
                         </View>
-                        <TouchableOpacity className="bg-white p-2 rounded-full border border-blue-100">
+                        <TouchableOpacity onPress={() => setBookingModalVisible(true)} className="bg-white p-2 rounded-full border border-blue-100">
+                             <Ionicons name="calendar-outline" size={20} color="#0061FF" />
+                        </TouchableOpacity>
+                        <TouchableOpacity className="bg-white p-2 rounded-full border border-blue-100 ml-2">
                              <Ionicons name="call-outline" size={20} color="#0061FF" />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={handleChatWithSeller} className="bg-white p-2 rounded-full border border-blue-100 ml-2">
@@ -355,7 +422,7 @@ const ReviewPropertyDetailScreen = () => {
                 <View className="bg-white p-5 mb-6 shadow-sm">
                     <Text className="text-lg font-rubik-bold text-gray-800 mb-4 border-l-4 border-blue-500 pl-3">Thẩm Định Giá</Text>
 
-                    {/* 1. AI SUGGESTION CARD */}
+                    {/* AI SUGGESTION CARD */}
                     <View className="bg-indigo-50 rounded-xl p-4 mb-5 border border-indigo-100 relative overflow-hidden">
                         <View className="absolute -right-4 -top-4 w-20 h-20 bg-indigo-100 rounded-full opacity-50" />
                         <View className="flex-row items-center justify-between mb-2">
@@ -368,7 +435,6 @@ const ReviewPropertyDetailScreen = () => {
                             </TouchableOpacity>
                         </View>
 
-                        {/* HIỂN THỊ KẾT QUẢ AI - ĐÃ SỬA LỖI JSX */}
                         {aiPrediction ? (
                             <>
                                 <View className="flex-row items-end justify-between">
@@ -416,7 +482,7 @@ const ReviewPropertyDetailScreen = () => {
                         )}
                     </View>
 
-                    {/* 2. BROKER INPUT */}
+                    {/* BROKER INPUT */}
                     <View className="mb-4">
                         <Text className="text-gray-500 mb-2 text-xs uppercase font-bold">Quyết định của Broker</Text>
                         <View className="flex-row items-center justify-between bg-white border border-gray-300 rounded-xl p-1 shadow-sm">
@@ -440,7 +506,7 @@ const ReviewPropertyDetailScreen = () => {
                         </View>
                     </View>
 
-                    {/* 3. GHI CHÚ */}
+                    {/* GHI CHÚ */}
                     <View className="relative">
                         <Text className="absolute left-3 top-3 text-xs text-gray-400 z-10 bg-gray-50 px-1">Ghi chú duyệt tin</Text>
                         <TextInput
@@ -467,6 +533,69 @@ const ReviewPropertyDetailScreen = () => {
                     <Text className={`${(!form.isLegalChecked || !form.isKycChecked) ? 'text-gray-400' : 'text-white'} font-bold text-xs`}>DUYỆT</Text>
                 </TouchableOpacity>
             </View>
+
+            {/* BOOKING MODAL */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={bookingModalVisible}
+                onRequestClose={() => setBookingModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <KeyboardAvoidingView
+                            behavior={Platform.OS === "ios" ? "padding" : "height"}
+                            style={{ width: '100%', alignItems: 'center' }}
+                        >
+                            <View style={{ backgroundColor: 'white', padding: 20, borderRadius: 20, width: '90%' }}>
+                                <Text className="text-xl font-rubik-bold mb-4 text-center">Đặt lịch hẹn với Chủ nhà</Text>
+                                
+                                <Text className="font-rubik-medium mb-2">Thời gian dự kiến:</Text>
+                                <View className="bg-gray-100 p-3 rounded-lg mb-4 flex-row justify-between items-center">
+                                     <View>
+                                         <Text className="text-black-300 font-rubik-bold text-base">
+                                            {selectedDate.toLocaleDateString('vi-VN')}
+                                         </Text>
+                                         <Text className="text-primary-300 font-rubik-medium">
+                                            {selectedDate.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}
+                                         </Text>
+                                     </View>
+                                     <View className="flex-row gap-2">
+                                        <Button title="Ngày" onPress={() => showMode('date')} />
+                                        <Button title="Giờ" onPress={() => showMode('time')} />
+                                     </View>
+                                </View>
+                                
+                                {showDatePicker && (
+                                    <DateTimePicker
+                                        testID="dateTimePicker"
+                                        value={selectedDate}
+                                        mode={datePickerMode}
+                                        is24Hour={true}
+                                        display="default"
+                                        onChange={onChangeDate}
+                                        minimumDate={new Date()}
+                                    />
+                                )}
+
+                                <Text className="font-rubik-medium mb-2">Ghi chú (Lý do/Địa điểm):</Text>
+                                <TextInput 
+                                    style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 10, height: 80, textAlignVertical: 'top', marginBottom: 20 }}
+                                    placeholder="Tôi cần qua thẩm định nhà..."
+                                    multiline
+                                    value={bookingNote}
+                                    onChangeText={setBookingNote}
+                                />
+
+                                <View className="flex-row justify-end gap-3">
+                                    <Button title="Hủy" onPress={() => setBookingModalVisible(false)} color="#666" />
+                                    <Button title={isBooking ? "Đang gửi..." : "Xác nhận"} onPress={handleBookViewing} disabled={isBooking} />
+                                </View>
+                            </View>
+                        </KeyboardAvoidingView>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </SafeAreaView>
     );
 };
