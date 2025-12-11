@@ -13,9 +13,10 @@ const AllPendingScreen = () => {
     const [refreshing, setRefreshing] = useState(false);
 
     const fetchData = async () => {
+        if (!user) return;
         setLoading(true);
         try {
-            const data = await getAllPendingProperties();
+            const data = await getAllPendingProperties(user.region);
             setProperties(data);
         } catch (error) {
             console.error(error);
@@ -26,11 +27,12 @@ const AllPendingScreen = () => {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [user]);
 
     const onRefresh = async () => {
+        if (!user) return;
         setRefreshing(true);
-        const data = await getAllPendingProperties();
+        const data = await getAllPendingProperties(user.region);
         setProperties(data);
         setRefreshing(false);
     };

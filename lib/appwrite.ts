@@ -29,7 +29,7 @@ export const avatar = new Avatars(client);
 export const databases = new Databases(client);
 export const storage = new Storage(client);
 
-export async function createUser(email: string, password: string, username: string, role: string) {
+export async function createUser(email: string, password: string, username: string, role: string, region?: string) {
     let newAccount;
     try {
         newAccount = await account.create(ID.unique(), email, password, username);
@@ -56,16 +56,22 @@ export async function createUser(email: string, password: string, username: stri
     }
 
     try {
+        const profileData: any = { 
+            role: role, 
+            name: username, 
+            email: email,
+            credits: 10 // **GÁN CREDITS MẶC ĐỊNH**
+        };
+        
+        if (region) {
+            profileData.region = region;
+        }
+
         const profile = await databases.createDocument(
             config.databaseId!, 
             config.profilesCollectionId!, 
             newAccount.$id, 
-            { 
-                role: role, 
-                name: username, 
-                email: email,
-                credits: 10 // **GÁN CREDITS MẶC ĐỊNH**
-            }
+            profileData
         );
         return profile;
     } catch (error: any) {
@@ -115,7 +121,8 @@ export async function getCurrentUser() {
             role: userProfile.role,
             avatar: userProfile.avatar || currentAccount.avatar,
             credits: userProfile.credits,
-            favorites: userProfile.favorites || [] // Lấy danh sách yêu thích
+            favorites: userProfile.favorites || [], // Lấy danh sách yêu thích
+            region: userProfile.region // Lấy thông tin vùng hoạt động của môi giới
         };
 
     } catch (error: any) {

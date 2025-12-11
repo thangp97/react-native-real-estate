@@ -33,13 +33,18 @@ export async function getAgentById({ agentId }: { agentId: string }) {
     }
 }
 
-export async function getBrokerStats(userId: string) {
+export async function getBrokerStats(userId: string, region?: string) {
     try {
-            // 1. Đếm số tin đang chờ duyệt trên toàn hệ thống (Work Queue)
+            // 1. Đếm số tin đang chờ duyệt (Work Queue) - Có lọc theo region
+            const pendingQueries = [Query.equal('status', 'available')];
+            if (region) {
+                pendingQueries.push(Query.equal('region', region));
+            }
+
             const pendingDocs = await databases.listDocuments(
                 config.databaseId!,
                 config.propertiesCollectionId!,
-                [Query.equal('status', 'available')]
+                pendingQueries
             );
 
             // 2. Đếm số tin BẠN đang quản lý (Active Work)
@@ -78,13 +83,15 @@ export async function getBrokerStats(userId: string) {
         }
 }
 
-export async function getBrokerRecentProperties(userId: string) {
+export async function getBrokerRecentProperties(userId: string, region: string) {
     try {
+        if (!region) return [];
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
             [
-                Query.equal('status', 'available'), // FIX: Dùng giá trị thật
+                Query.equal('status', 'available'),
+                Query.equal('region', region), // Filter by region
                 Query.orderDesc('$createdAt'),
                 Query.limit(5)
             ]

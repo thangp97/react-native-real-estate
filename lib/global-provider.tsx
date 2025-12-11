@@ -10,6 +10,7 @@ interface User {
     role: string;
     credits?: number; // Credit for sellers
     favorites?: string[]; // Add favorites
+    region?: string; // Add region for brokers
 }
 
 interface GlobalContextType {

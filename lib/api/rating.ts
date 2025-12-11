@@ -92,3 +92,17 @@ export async function checkReviewExists(userId: string, propertyId: string) {
         return false;
     }
 }
+
+export async function getReviewsByAgentId(agentId: string) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.reviewsCollectionId!,
+            [Query.equal('agentId', agentId), Query.orderDesc('createdAt')]
+        );
+        return result.documents;
+    } catch (error) {
+        console.error("Lỗi lấy danh sách đánh giá:", error);
+        return [];
+    }
+}

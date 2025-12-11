@@ -17,6 +17,7 @@ import icons from "@/constants/icons";
 import images from "@/constants/images";
 import { useAppwrite } from "@/lib/useAppwrite";
 import { getAgentById, getPropertiesByBrokerId } from "@/lib/api/broker";
+import { getReviewsByAgentId } from "@/lib/api/rating";
 import { Card } from "@/components/Cards";
 
 const BrokerDetails = () => {
@@ -42,10 +43,21 @@ const BrokerDetails = () => {
         shouldFetch: !!id,
     });
 
+    const {
+        data: reviews,
+        loading: loadingReviews,
+        refetch: refetchReviews
+    } = useAppwrite({
+        fn: () => getReviewsByAgentId(id!),
+        params: { agentId: id! },
+        shouldFetch: !!id,
+    });
+
     useEffect(() => {
         if (id) {
             refetchBroker();
             refetchProperties();
+            refetchReviews();
         }
     }, [id]);
 
@@ -95,7 +107,7 @@ const BrokerDetails = () => {
     if (loadingBroker || loadingProperties) {
         return (
             <SafeAreaView className="flex-1 justify-center items-center bg-white">
-                <ActivityIndicator size="large" color="#0000ff" />
+                <ActivityIndicator size="large" color="#0061FF" />
                 <Text className="mt-2 text-primary-300 font-rubik-medium">Đang tải thông tin môi giới...</Text>
             </SafeAreaView>
         );
@@ -117,11 +129,12 @@ const BrokerDetails = () => {
     const agentAvatar = broker.avatar ? { uri: broker.avatar } : images.avatar;
     const agentName = broker.name || "Chuyên viên tư vấn";
     const agentEmail = broker.email || "Đang cập nhật";
-    const agentPhone = broker.phone || "Đang cập nhật";
+    const agentRating = broker.rating || 0;
+    const agentReviewCount = broker.reviewCount || 0;
 
     return (
         <SafeAreaView className="flex-1 bg-white">
-            <ScrollView className="flex-1">
+            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
                 {/* Header */}
                 <View className="px-5 py-4 flex-row items-center justify-between border-b border-gray-100">
                     <TouchableOpacity onPress={() => router.back()}>
@@ -130,68 +143,120 @@ const BrokerDetails = () => {
                     <Text className="text-xl font-rubik-bold text-black-300">
                         Thông tin Môi giới
                     </Text>
-                    <View className="w-6" /> {/* Placeholder for alignment */}
+                    <View className="w-6" />
                 </View>
 
+                {/* Profile Section */}
                 <View className="p-5 items-center">
                     <Image
                         source={agentAvatar}
                         className="w-32 h-32 rounded-full border-2 border-primary-300"
                         resizeMode="cover"
                     />
-                    <Text className="text-2xl font-rubik-extrabold text-black-300 mt-4">
+                    <Text className="text-2xl font-rubik-extrabold text-black-300 mt-4 text-center">
                         {agentName}
                     </Text>
                     <Text className="text-base font-rubik-medium text-black-200 mt-1">
                         {agentEmail}
                     </Text>
 
+                    {/* Rating Badge */}
+                    <View className="flex-row items-center mt-2 bg-yellow-100 px-3 py-1 rounded-full">
+                        <Image source={icons.star} className="w-4 h-4 mr-1" tintColor="#F59E0B" />
+                        <Text className="font-rubik-bold text-yellow-700">
+                            {agentRating} ({agentReviewCount} đánh giá)
+                        </Text>
+                    </View>
+
                     <View className="flex-row mt-5 gap-4">
                         <TouchableOpacity
                             onPress={() => handleContact('call')}
-                            className="bg-primary-300 p-3 rounded-full flex-row items-center justify-center min-w-[120px]"
+                            className="bg-primary-300 p-3 rounded-full flex-row items-center justify-center min-w-[120px] shadow-sm shadow-zinc-300"
                         >
                             <Image source={icons.phone} className="w-5 h-5 mr-2" tintColor="white" />
-                            <Text className="text-white font-rubik-bold">Gọi</Text>
+                            <Text className="text-white font-rubik-bold">Gọi ngay</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             onPress={() => handleContact('sms')}
-                            className="bg-primary-100 p-3 rounded-full flex-row items-center justify-center min-w-[120px]"
+                            className="bg-white border border-primary-200 p-3 rounded-full flex-row items-center justify-center min-w-[120px]"
                         >
                             <Image source={icons.chat} className="w-5 h-5 mr-2" tintColor="#0061FF" />
                             <Text className="text-primary-300 font-rubik-bold">Nhắn tin</Text>
                         </TouchableOpacity>
                     </View>
-                    <Text className="text-base font-rubik-medium text-black-200 mt-4">
-                        Số điện thoại: {agentPhone}
-                    </Text>
                 </View>
 
-                <View className="mt-7 px-5">
+                {/* Properties Section */}
+                <View className="mt-2 px-5">
                     <Text className="text-xl font-rubik-bold text-black-300 mb-4">
-                        Các bất động sản đang quản lý ({brokerProperties.length})
+                        Bất động sản đang bán ({brokerProperties?.length || 0})
                     </Text>
-                    {brokerProperties.length === 0 ? (
-                        <Text className="text-gray-500 font-rubik-medium text-center">
-                            Hiện không có bất động sản nào đang được quản lý.
+                    {(!brokerProperties || brokerProperties.length === 0) ? (
+                        <Text className="text-gray-500 font-rubik-medium text-center py-5 bg-gray-50 rounded-lg">
+                            Hiện không có bất động sản nào.
                         </Text>
                     ) : (
                         <FlatList
                             data={brokerProperties}
                             keyExtractor={(item) => item.$id}
-                            numColumns={2}
-                            columnWrapperStyle={{ justifyContent: 'space-between', marginBottom: 15 }}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={{ gap: 15, paddingBottom: 10 }}
                             renderItem={({ item }) => (
-                                <View style={{ width: '48%' }}>
+                                <View style={{ width: 220 }}>
                                     <Card 
                                         item={item} 
                                         onPress={() => router.push(`/properties/${item.$id}`)} 
                                     />
                                 </View>
                             )}
-                            contentContainerStyle={{ paddingBottom: 20 }}
-                            scrollEnabled={false} // Disable inner scroll, let parent ScrollView handle it
                         />
+                    )}
+                </View>
+
+                {/* Reviews Section */}
+                <View className="mt-7 px-5 pb-10">
+                    <Text className="text-xl font-rubik-bold text-black-300 mb-4">
+                        Đánh giá từ khách hàng ({reviews?.length || 0})
+                    </Text>
+
+                    {loadingReviews ? (
+                        <ActivityIndicator size="small" color="#0061FF" />
+                    ) : (!reviews || reviews.length === 0) ? (
+                        <View className="bg-gray-50 p-5 rounded-xl items-center">
+                            <Text className="text-gray-500 font-rubik text-center">
+                                Chưa có đánh giá nào.
+                            </Text>
+                        </View>
+                    ) : (
+                        <View className="gap-4">
+                            {reviews.map((review) => (
+                                <View key={review.$id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                    <View className="flex-row items-center justify-between mb-2">
+                                        <Text className="font-rubik-bold text-black-300 text-base">
+                                            {/* Assuming reviewerId can be expanded to get name, otherwise mask it */}
+                                            Khách hàng
+                                        </Text>
+                                        <View className="flex-row">
+                                            {[1, 2, 3, 4, 5].map((s) => (
+                                                <Image 
+                                                    key={s} 
+                                                    source={icons.star} 
+                                                    className="w-3 h-3" 
+                                                    tintColor={s <= review.rating ? "#F59E0B" : "#E0E0E0"} 
+                                                />
+                                            ))}
+                                        </View>
+                                    </View>
+                                    <Text className="text-gray-600 font-rubik text-sm leading-5">
+                                        "{review.comment}"
+                                    </Text>
+                                    <Text className="text-gray-400 font-rubik text-xs mt-2 text-right">
+                                        {new Date(review.createdAt).toLocaleDateString('vi-VN')}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
                     )}
                 </View>
             </ScrollView>
