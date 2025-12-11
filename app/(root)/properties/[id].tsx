@@ -1,43 +1,41 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
+    Alert,
+    Button,
+    Dimensions,
     FlatList,
     Image,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
-    Dimensions,
-    Platform,
-    Linking,
-    Alert,
-    ActivityIndicator,
-    Modal,
-    TextInput,
-    Button,
-    KeyboardAvoidingView,
-    TouchableWithoutFeedback,
     Keyboard,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    ScrollView,
     Share // Added Share
+    ,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View
 } from "react-native";
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Card } from "@/components/Cards";
 import icons from "@/constants/icons";
 import images from "@/constants/images";
-import Comment from "@/components/Comment";
-import { facilities } from "@/constants/data";
-import { Card } from "@/components/Cards";
 
-import { useAppwrite } from "@/lib/useAppwrite";
-import { getPropertyById, togglePropertyFavorite, createBooking, getSimilarProperties } from "@/lib/api/buyer";
-import { useGlobalContext } from "@/lib/global-provider";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useComparisonContext } from "@/lib/comparison-provider";
 import MortgageCalculator from "@/components/MortgageCalculator";
+import { createBooking, getPropertyById, getSimilarProperties, togglePropertyFavorite } from "@/lib/api/buyer";
+import { useComparisonContext } from "@/lib/comparison-provider";
+import { useGlobalContext } from "@/lib/global-provider";
+import { useAppwrite } from "@/lib/useAppwrite";
+import { useCallback, useEffect, useState } from "react";
 
+import { getUserByEmail, markPropertyAsSold, updatePropertyPrice } from "@/lib/api/broker";
+import { checkReviewExists, createReview } from "@/lib/api/rating";
 import { formatStatus, getStatusColor } from "@/lib/utils";
-import { markPropertyAsSold, getUserByEmail, updatePropertyPrice } from "@/lib/api/broker";
-import { createReview, checkReviewExists } from "@/lib/api/rating";
 
 type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'approved' | 'available';
 
@@ -119,13 +117,6 @@ const Property = () => {
     const [buyerEmail, setBuyerEmail] = useState('');
     const [markingSold, setMarkingSold] = useState(false);
 
-    // State for Review Logic
-    const [reviewModalVisible, setReviewModalVisible] = useState(false);
-    const [ratingValue, setRatingValue] = useState(5);
-    const [reviewComment, setReviewComment] = useState('');
-    const [hasReviewed, setHasReviewed] = useState(false);
-    const [submittingReview, setSubmittingReview] = useState(false);
-
     const handleMarkAsSold = async () => {
         if (!buyerEmail.trim()) {
             Alert.alert("Lỗi", "Vui lòng nhập Email người mua.");
@@ -196,32 +187,6 @@ const Property = () => {
             checkReviewExists(user.$id, id!).then(exists => setHasReviewed(exists));
         }
     }, [property, user, id]);
-
-    const handleSubmitReview = async () => {
-        if (!user || !property) return;
-        
-        let targetAgentId = DEFAULT_BROKER_ID;
-        if (property?.agent?.$id) targetAgentId = property.agent.$id;
-        else if (property?.brokerId) targetAgentId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
-
-        setSubmittingReview(true);
-        try {
-            await createReview({
-                reviewerId: user.$id,
-                agentId: targetAgentId,
-                propertyId: id!,
-                rating: ratingValue,
-                comment: reviewComment
-            });
-            Alert.alert("Cảm ơn", "Đánh giá của bạn đã được gửi!");
-            setHasReviewed(true);
-            setReviewModalVisible(false);
-        } catch (error) {
-            Alert.alert("Lỗi", "Không thể gửi đánh giá. Vui lòng thử lại.");
-        } finally {
-            setSubmittingReview(false);
-        }
-    };
 
     // Carousel Logic
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -905,32 +870,6 @@ const Property = () => {
                             {property?.price ? `${property.price.toLocaleString('vi-VN')} VND` : ''}
                         </Text>
                     </View>
-
-                    {property?.status === 'sold' ? (
-                        (property.buyerId === user?.$id) ? (
-                            hasReviewed ? (
-                                <View className="flex-1 flex flex-row items-center justify-center bg-gray-200 py-3 rounded-full flex-shrink">
-                                    <Text className="text-gray-500 text-base text-center font-rubik-bold">
-                                        Đã đánh giá
-                                    </Text>
-                                </View>
-                            ) : (
-                                <TouchableOpacity 
-                                    onPress={() => setReviewModalVisible(true)}
-                                    className="flex-1 flex flex-row items-center justify-center bg-yellow-500 py-3 rounded-full flex-shrink shadow-md"
-                                >
-                                    <Text className="text-white text-base text-center font-rubik-bold">
-                                        ★ Đánh giá Môi giới
-                                    </Text>
-                                </TouchableOpacity>
-                            )
-                        ) : (
-                            <View className="flex-1 flex-row items-center justify-center bg-gray-400 py-3 rounded-full flex-shrink">
-                                <Text className="text-white text-lg text-center font-rubik-bold">
-                                    Đã bán
-                                </Text>
-                            </View>
-                        )
                     {property?.status === 'sold' ? (
                         (property.buyerId === user?.$id) ? (
                             hasReviewed ? (
