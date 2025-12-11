@@ -178,7 +178,6 @@ export async function finalizeVerification(
     }
 }
 
-import { ID } from "react-native-appwrite"; // Đảm bảo import ID
 
 export async function updatePropertyPrice(propertyId: string, newPrice: number, changedBy: string) {
     try {

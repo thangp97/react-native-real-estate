@@ -145,31 +145,17 @@ const TabsLayout = () => {
                     <Tabs.Screen name="profile" options={{ title: 'Hồ Sơ', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} /> }} />
 
                     {/* Ẩn các tab không liên quan */}
+                    <Tabs.Screen name="search-properties" options={{ href: null }} />
                     <Tabs.Screen name="index" options={{ href: null }} />
                     <Tabs.Screen name="explore" options={{ href: null }} />
                     <Tabs.Screen name="my-properties" options={{ href: null }} />
                     <Tabs.Screen name="seller-notifications" options={{ href: null }} />
-
-
                     <Tabs.Screen name="saved" options={{ href: null }} />
                     <Tabs.Screen name="review-property/[id]" options={{ href: null }} />
                     <Tabs.Screen name="all-pending" options={{ href: null }} />
                 </Tabs>
             );
         }
-                {/* Ẩn các tab không liên quan */}
-                <Tabs.Screen name="search-properties" options={{ href: null }} />
-                <Tabs.Screen name="index" options={{ href: null }} />
-                <Tabs.Screen name="explore" options={{ href: null }} />
-                <Tabs.Screen name="my-properties" options={{ href: null }} />
-                <Tabs.Screen name="seller-notifications" options={{ href: null }} />
-                <Tabs.Screen name="seller-chat" options={{ href: null }} />
-                <Tabs.Screen name="saved" options={{ href: null }} />
-                <Tabs.Screen name="review-property/[id]" options={{ href: null }} />
-                <Tabs.Screen name="all-pending" options={{ href: null }} />
-            </Tabs>
-        );
-    }
 
     return <SignOutAndRedirect />;
 };

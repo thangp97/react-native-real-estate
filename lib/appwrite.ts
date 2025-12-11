@@ -14,7 +14,7 @@ export const config = {
     bookingsCollectionId: 'bookings',
     notificationsCollectionId: 'notifications',
     messagesCollectionId: 'messages',
-    chatsCollectionId: 'chats'
+    chatsCollectionId: 'chats',
     priceHistoryCollectionId: 'price_history',
     reviewsCollectionId: 'reviews', // Collection đánh giá
 }
