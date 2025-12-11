@@ -172,12 +172,13 @@ const CreateProperty = () => {
                 bedrooms: parseInt(form.bedrooms),
                 bathrooms: parseInt(form.bathrooms),
                 rating: 0,
-                status: 'pending_approval',
+                status: 'available', // Bài đăng mới luôn có status là 'available' để môi giới có thể nhận
                 expiresAt: expiresAt.toISOString(),
             };
 
             if (isEditing) {
-                const { expiresAt, ...updateData } = data;
+                // Khi chỉnh sửa, không thay đổi status và expiresAt
+                const { status, expiresAt, ...updateData } = data;
                 await databases.updateDocument(config.databaseId!, 'properties', propertyId!, updateData);
                 Alert.alert('Thành công', 'Đã cập nhật bài đăng.');
             } else {

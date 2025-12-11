@@ -13,6 +13,7 @@ export const config = {
     galleriesCollectionId: 'galleries',
     bookingsCollectionId: 'bookings',
     notificationsCollectionId: 'notifications',
+    priceHistoryCollectionId: 'price_history', // Collection lưu lịch sử giá
 }
 
 export const client = new Client();

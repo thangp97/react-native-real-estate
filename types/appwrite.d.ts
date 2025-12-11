@@ -8,6 +8,7 @@ declare module "react-native-appwrite" {
             name?: string;
             address?: string;
             price?: number;
+            proposedPrice?: number;
             avatar?: string;
             review?: string;
             username?: string;

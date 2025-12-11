@@ -1,4 +1,4 @@
-import { getSellerData, getUserProperties, renewProperty } from '@/lib/api/seller';
+import { acceptProposedPrice, getSellerData, getUserProperties, renewProperty } from '@/lib/api/seller';
 import { useGlobalContext } from '@/lib/global-provider';
 import { useAppwrite } from '@/lib/useAppwrite';
 import { Link, router } from 'expo-router';
@@ -7,25 +7,29 @@ import { ActivityIndicator, Alert, FlatList, Image, Keyboard, KeyboardAvoidingVi
 import { Models } from 'react-native-appwrite';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-type PropertyStatus = 'pending_approval' | 'approved' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired';
+type PropertyStatus = 'pending_approval' | 'reviewing' | 'approved' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'available';
 
 interface PropertyDocument extends Models.Document {
     name: string;
     price: number;
+    proposedPrice?: number;
     image: string;
     status: PropertyStatus;
     expiresAt: string;
+    assignedBroker?: any; // Broker được assign
+    broker?: any; // Thông tin broker (nếu có)
 }
 
-const formatStatus = (status: PropertyStatus) => {
+const formatStatus = (status: PropertyStatus, brokerName?: string) => {
     const statuses: Record<PropertyStatus, string> = {
         'pending_approval': 'Chờ duyệt',
+        'reviewing': 'Đang xem xét',
         'approved': 'Đã duyệt',
-        'for_sale': 'Đang bán',
         'deposit_paid': 'Đã cọc',
         'sold': 'Đã bán',
         'rejected': 'Bị từ chối',
-        'expired': 'Hết hạn'
+        'expired': 'Hết hạn',
+        'available': brokerName ? `Môi giới ${brokerName} nhận duyệt` : 'Chờ môi giới nhận'
     };
     return statuses[status] || status;
 };
@@ -33,28 +37,36 @@ const formatStatus = (status: PropertyStatus) => {
 const getStatusColor = (status: PropertyStatus) => {
     const colors: Record<PropertyStatus, string> = {
         'pending_approval': '#f0ad4e',
+        'reviewing': '#17a2b8',
         'approved': '#5cb85c',
-        'for_sale': '#5cb85c',
         'deposit_paid': '#337ab7',
         'sold': '#d9534f',
         'rejected': '#777',
-        'expired': '#777'
+        'expired': '#777',
+        'available': '#9c27b0' // Màu tím cho trạng thái available
     };
     return colors[status] || '#777';
 };
 
 const FILTER_OPTIONS: { label: string; value: PropertyStatus | 'all' }[] = [
     { label: 'Tất cả', value: 'all' },
+    { label: 'Chờ môi giới nhận', value: 'available' },
     { label: 'Chờ duyệt', value: 'pending_approval' },
+    { label: 'Đang xem xét', value: 'reviewing' },
     { label: 'Đã duyệt', value: 'approved' },
-    { label: 'Đang bán', value: 'for_sale' },
     { label: 'Đã cọc', value: 'deposit_paid' },
     { label: 'Đã bán', value: 'sold' },
     { label: 'Bị từ chối', value: 'rejected' },
     { label: 'Hết hạn', value: 'expired' },
 ];
 
-const PropertyCard = ({ item, credits, onRenew, isSeller }: { item: PropertyDocument, credits: number, onRenew: (propertyId: string, currentExpiry: Date) => void, isSeller: boolean }) => {
+const PropertyCard = ({ item, credits, onRenew, onAcceptPrice, isSeller }: { 
+    item: PropertyDocument, 
+    credits: number, 
+    onRenew: (propertyId: string, currentExpiry: Date) => void, 
+    onAcceptPrice: (propertyId: string, proposedPrice: number) => void,
+    isSeller: boolean 
+}) => {
     const expiryDate = new Date(item.expiresAt);
     const today = new Date();
     const daysLeft = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -68,9 +80,32 @@ const PropertyCard = ({ item, credits, onRenew, isSeller }: { item: PropertyDocu
                 <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
                 <Text style={styles.cardPrice}>{item.price.toLocaleString('vi-VN')} VND</Text>
                 
+                {/* Giá gợi ý từ môi giới */}
+                {isSeller && item.proposedPrice && (
+                    <View style={styles.proposedPriceContainer}>
+                        <View style={styles.proposedPriceHeader}>
+                            <Text style={styles.proposedPriceLabel}>💡 Giá gợi ý từ môi giới:</Text>
+                            <Text style={styles.proposedPriceValue}>
+                                {item.proposedPrice.toLocaleString('vi-VN')} VND
+                            </Text>
+                        </View>
+                        <TouchableOpacity 
+                            style={styles.acceptPriceButton}
+                            onPress={() => onAcceptPrice(item.$id, item.proposedPrice!)}
+                        >
+                            <Text style={styles.acceptPriceButtonText}>✓ Cập nhật giá</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+                
                 <View style={styles.statusRow}>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                        <Text style={styles.statusText}>{formatStatus(item.status)}</Text>
+                        <Text style={styles.statusText}>
+                            {formatStatus(
+                                item.status, 
+                                item.broker?.name || item.assignedBroker?.name || undefined
+                            )}
+                        </Text>
                     </View>
                 </View>
                 
@@ -159,6 +194,35 @@ const MyProperties = () => {
         setSelectedProperty({ id: propertyId, expiry: currentExpiry });
         setShowRenewModal(true);
         setRenewDays('');
+    };
+
+    const handleAcceptProposedPrice = async (propertyId: string, proposedPrice: number) => {
+        if (!user?.$id) {
+            Alert.alert('Lỗi', 'Không tìm thấy thông tin người dùng');
+            return;
+        }
+
+        Alert.alert(
+            '💡 Cập nhật giá',
+            `Bạn có muốn cập nhật giá từ ${(properties?.find((p: any) => p.$id === propertyId)?.price || 0).toLocaleString('vi-VN')} VND sang ${proposedPrice.toLocaleString('vi-VN')} VND không?`,
+            [
+                { text: 'Hủy', style: 'cancel' },
+                {
+                    text: 'Cập nhật',
+                    onPress: async () => {
+                        try {
+                            await acceptProposedPrice({ propertyId, proposedPrice, userId: user.$id });
+                            Alert.alert('Thành công', 'Đã cập nhật giá bất động sản và lưu lịch sử!');
+                            if (user?.$id) {
+                                await refetch({ userId: user.$id });
+                            }
+                        } catch (error: any) {
+                            Alert.alert('Lỗi', error.message);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const handleConfirmRenew = async () => {
@@ -355,7 +419,13 @@ const MyProperties = () => {
                 renderItem={({ item }) => (
                     <Link href={{ pathname: "/property-details", params: { id: item.$id } }} asChild>
                         <TouchableOpacity>
-                            <PropertyCard item={item} credits={credits} onRenew={handleRenew} isSeller={isSeller} />
+                            <PropertyCard 
+                                item={item} 
+                                credits={credits} 
+                                onRenew={handleRenew} 
+                                onAcceptPrice={handleAcceptProposedPrice}
+                                isSeller={isSeller} 
+                            />
                         </TouchableOpacity>
                     </Link>
                 )}
@@ -539,6 +609,41 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#007BFF',
         marginBottom: 8,
+    },
+    proposedPriceContainer: {
+        backgroundColor: '#fff9e6',
+        borderWidth: 2,
+        borderColor: '#ffc107',
+        borderRadius: 8,
+        padding: 12,
+        marginVertical: 8,
+    },
+    proposedPriceHeader: {
+        marginBottom: 8,
+    },
+    proposedPriceLabel: {
+        fontSize: 13,
+        color: '#856404',
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    proposedPriceValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#ff6b00',
+    },
+    acceptPriceButton: {
+        backgroundColor: '#28a745',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 6,
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    acceptPriceButtonText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
     },
     statusRow: {
         flexDirection: 'row',
