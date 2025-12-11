@@ -22,10 +22,10 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getOrCreateChat } from '@/lib/api/chat';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 import icons from "@/constants/icons";
 import images from "@/constants/images";
-import Comment from "@/components/Comment";
 import { facilities } from "@/constants/data";
 import { Card } from "@/components/Cards";
 
@@ -37,8 +37,8 @@ import { useComparisonContext } from "@/lib/comparison-provider";
 import MortgageCalculator from "@/components/MortgageCalculator";
 
 type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'approved' | 'available';
-// ... (keep existing helper functions: formatStatus, getStatusColor) ...
-// Hàm helper để định dạng trạng thái và màu sắc
+// ... (Giữ nguyên các hàm helper formatStatus, getStatusColor như cũ)
+
 const formatStatus = (status: PropertyStatus) => {
     const statuses: Record<PropertyStatus, string> = {
         'pending_approval': 'Chờ duyệt',
@@ -52,6 +52,7 @@ const formatStatus = (status: PropertyStatus) => {
     };
     return statuses[status] || status;
 };
+
 
 const getStatusColor = (status: PropertyStatus) => {
     const colors: Record<PropertyStatus, string> = {
@@ -99,6 +100,10 @@ const Property = () => {
     // State cho comparison modal
     const [comparisonModalVisible, setComparisonModalVisible] = useState(false);
 
+    // --- STATE MỚI CHO CHAT ---
+    const [isChatting, setIsChatting] = useState(false);
+
+
     // Carousel Logic
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const allImages = property ? [property.image, ...(property.galleryImages || [])].filter(Boolean) : [];
@@ -126,9 +131,9 @@ const Property = () => {
     useEffect(() => {
         const fetchSimilar = async () => {
             if (property?.type && id) {
-                const similar = await getSimilarProperties({ 
-                    propertyId: id, 
-                    type: property.type 
+                const similar = await getSimilarProperties({
+                    propertyId: id,
+                    type: property.type
                 });
                 setSimilarProperties(similar);
             }
@@ -156,30 +161,30 @@ const Property = () => {
         setToggling(true);
         try {
             // Extract IDs if favorites are objects
-            const currentFavorites = (user.favorites || []).map((item: any) => 
+            const currentFavorites = (user.favorites || []).map((item: any) =>
                 typeof item === 'string' ? item : item.$id
             );
-            
+
             const newFavorites = await togglePropertyFavorite(user.$id, id, currentFavorites);
-            
+
             const isNowFavorite = newFavorites.includes(id);
             setIsFavorite(isNowFavorite);
-            
+
             if (setUser) {
                 setUser({
                     ...user,
                     favorites: newFavorites
                 });
             }
-            
+
             Alert.alert(
                 "Thành công",
                 isNowFavorite ? "Đã thêm vào mục yêu thích!" : "Đã xóa khỏi mục yêu thích."
             );
-            
+
         } catch (error) {
             Alert.alert("Lỗi", "Không thể lưu tin. Vui lòng thử lại.");
-            setIsFavorite(isFavorite); 
+            setIsFavorite(isFavorite);
         } finally {
             setToggling(false);
         }
@@ -187,7 +192,7 @@ const Property = () => {
 
     const handleToggleCompare = () => {
         if (!property) return;
-        
+
         if (isInCompare(property.$id)) {
             removeFromCompare(property.$id);
             Alert.alert("Đã xóa", "Đã xóa khỏi danh sách so sánh.");
@@ -207,21 +212,74 @@ const Property = () => {
         }
     };
 
-    const DEFAULT_BROKER_ID = "66a010d1000b213b2e59"; 
-
+    // --- CÁC HẰNG VÀ FALLBACK DATA (CÓ THỂ MOCK) ---
+    const DEFAULT_BROKER_ID = "693992690020a5daee7c"; // Giữ lại ID mặc định cho logic booking
     const PLATFORM_DEFAULT_BROKER = {
         name: "Chuyên viên tư vấn ReState",
         phone: "1900 1234",
         email: "tuvan@restate.vn",
-        avatar: images.avatar
+        avatar: images.avatar,
+        $id: DEFAULT_BROKER_ID // Thêm ID vào object
     };
 
+    // Logic xác định người liên hệ (Broker hoặc Creator)
     const currentBroker = property?.agent ? {
         name: property.agent.name,
         phone: property.agent.phone || PLATFORM_DEFAULT_BROKER.phone,
         email: property.agent.email,
-        avatar: { uri: property.agent.avatar }
-    } : PLATFORM_DEFAULT_BROKER;
+        avatar: { uri: property.agent.avatar },
+        $id: property.agent.$id
+    } : (property?.creator ? { // Fallback sang Creator/Seller
+        name: property.creator.name,
+        phone: property.creator.phone || PLATFORM_DEFAULT_BROKER.phone,
+        email: property.creator.email,
+        avatar: { uri: property.creator.avatar },
+        $id: property.creator.$id
+    } : PLATFORM_DEFAULT_BROKER);
+
+
+    // --- HÀM XỬ LÝ CHAT (ĐÃ SỬA LỖI SCOPE VÀ KHÔNG DÙNG MOCK DATA TRỰC TIẾP) ---
+    const handleStartChat = async () => {
+        if (!user) {
+            Alert.alert("Thông báo", "Vui lòng đăng nhập để chat.");
+            return;
+        }
+        if (loadingProperty || !property) return;
+
+        const targetUserId = currentBroker.$id;
+
+        if (!targetUserId || targetUserId === DEFAULT_BROKER_ID) {
+            Alert.alert("Thông báo", "Không thể chat với tổng đài. Vui lòng gọi điện trực tiếp.");
+            return;
+        }
+        if (targetUserId === user.$id) {
+            Alert.alert("Thông báo", "Bạn không thể chat với chính mình.");
+            return;
+        }
+
+        setIsChatting(true);
+        try {
+            console.log(`LOG CHAT (1): Buyer ID: ${user.$id}, Target ID: ${targetUserId}`);
+            const chatDoc = await getOrCreateChat(user.$id, targetUserId);
+
+            router.push({
+                pathname: '/chat/[id]',
+                params: {
+                    id: chatDoc.$id,
+                    otherUserId: targetUserId,
+                    otherUserName: currentBroker.name || 'Người tư vấn',
+                    otherUserAvatar: typeof currentBroker.avatar === 'object' && currentBroker.avatar.uri ? currentBroker.avatar.uri : currentBroker.avatar
+                }
+            });
+        } catch (error) {
+            console.error("LỖI TẠO CHAT ROOM:", error);
+            Alert.alert("Lỗi", "Không thể kết nối trò chuyện lúc này.");
+        } finally {
+            setIsChatting(false);
+        }
+    };
+    // --------------------------------------------------------------------------
+
 
     const handleOpenMap = () => {
         const address = property?.address;
@@ -235,7 +293,7 @@ const Property = () => {
             Linking.openURL(`mailto:${currentBroker.email}`);
             return;
         }
-        
+
         if (method === 'sms') {
             Linking.openURL(`sms:${currentBroker.phone}`);
         } else {
@@ -291,10 +349,7 @@ const Property = () => {
         }
 
         // Kiểm tra xem brokerId là object hay string để lấy ID chính xác
-        let targetAgentId = DEFAULT_BROKER_ID;
-        if (property?.brokerId) {
-            targetAgentId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
-        }
+        let targetAgentId = currentBroker.$id; // Dùng ID thật của Broker/Seller
 
         setIsBooking(true);
         try {
@@ -340,7 +395,7 @@ const Property = () => {
                             />
                         )}
                     />
-                    
+
                     <Image
                         source={images.whiteGradient}
                         className="absolute top-0 w-full z-40"
@@ -361,7 +416,7 @@ const Property = () => {
                             </TouchableOpacity>
 
                             <View className="flex flex-row items-center gap-3">
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={handleShare}
                                     className="flex flex-row bg-white/90 rounded-full size-11 items-center justify-center shadow-sm"
                                 >
@@ -371,12 +426,12 @@ const Property = () => {
                                         tintColor={"#191D31"}
                                     />
                                 </TouchableOpacity>
-                                <TouchableOpacity 
-                                    onPress={handleToggleCompare} 
+                                <TouchableOpacity
+                                    onPress={handleToggleCompare}
                                     className="flex flex-row bg-white/90 rounded-full size-11 items-center justify-center shadow-sm"
                                 >
                                     <Image
-                                        source={icons.info} 
+                                        source={icons.info}
                                         className="size-6"
                                         tintColor={isInCompare(id!) ? "#0061FF" : "#191D31"}
                                     />
@@ -388,7 +443,7 @@ const Property = () => {
                                         tintColor={isFavorite ? "#d9534f" : "#191D31"}
                                     />
                                 </TouchableOpacity>
-                                
+
                             </View>
                         </View>
                     </View>
@@ -468,11 +523,25 @@ const Property = () => {
                             </View>
 
                             <View className="flex flex-row items-center gap-3">
-                                <TouchableOpacity onPress={() => handleContact('sms')}>
-                                    <Image source={icons.chat} className="size-7" />
+                                {/* Nút Gọi điện */}
+                                <TouchableOpacity
+                                    onPress={() => handleContact('call')}
+                                    className="bg-white p-2 rounded-full border border-blue-100"
+                                >
+                                     <Ionicons name="call-outline" size={20} color="#0061FF" />
                                 </TouchableOpacity>
-                                <TouchableOpacity onPress={() => handleContact('call')}>
-                                    <Image source={icons.phone} className="size-7" />
+
+                                {/* Nút Chat In-App */}
+                                <TouchableOpacity
+                                    onPress={handleStartChat} // <-- Gọi hàm đã sửa lỗi
+                                    disabled={isChatting} // <-- Dùng state mới
+                                    className="bg-white p-2 rounded-full border border-blue-100 ml-2"
+                                >
+                                    {isChatting ? (
+                                        <ActivityIndicator size="small" color="#0061FF" />
+                                    ) : (
+                                        <Ionicons name="chatbubble-ellipses-outline" size={20} color="#0061FF" />
+                                    )}
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -550,7 +619,7 @@ const Property = () => {
                             </View>
                         </TouchableOpacity>
                     </View>
-                    
+
                     {property?.price && <MortgageCalculator propertyPrice={property.price} />}
 
                     {similarProperties.length > 0 && (
@@ -566,9 +635,9 @@ const Property = () => {
                                 keyExtractor={(item) => item.$id}
                                 renderItem={({ item }) => (
                                     <View style={{ width: 220 }}>
-                                        <Card 
-                                            item={item} 
-                                            onPress={() => router.push(`/properties/${item.$id}`)} 
+                                        <Card
+                                            item={item}
+                                            onPress={() => router.push(`/properties/${item.$id}`)}
                                         />
                                     </View>
                                 )}
@@ -601,7 +670,7 @@ const Property = () => {
                         </View>
                     ) : (
                         <View className="flex-1 flex-row gap-2">
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 onPress={() => setBookingModalVisible(true)}
                                 className="flex-1 flex flex-row items-center justify-center bg-primary-100 py-3 rounded-full"
                             >
@@ -609,8 +678,8 @@ const Property = () => {
                                     Đặt lịch
                                 </Text>
                             </TouchableOpacity>
-                            
-                            <TouchableOpacity 
+
+                            <TouchableOpacity
                                 onPress={() => handleContact('call')}
                                 className="flex-1 flex flex-row items-center justify-center bg-primary-300 py-3 rounded-full shadow-md shadow-zinc-400"
                             >
@@ -652,7 +721,7 @@ const Property = () => {
                         >
                             <View style={{ backgroundColor: 'white', padding: 20, borderRadius: 20, width: '90%' }}>
                                 <Text className="text-xl font-rubik-bold mb-4 text-center">Đặt lịch xem nhà</Text>
-                                
+
                                 <Text className="font-rubik-medium mb-2">Thời gian dự kiến:</Text>
                                 <View className="bg-gray-100 p-3 rounded-lg mb-4 flex-row justify-between items-center">
                                      <View>
@@ -668,7 +737,7 @@ const Property = () => {
                                         <Button title="Giờ" onPress={() => showMode('time')} />
                                      </View>
                                 </View>
-                                
+
                                 {showDatePicker && (
                                     <DateTimePicker
                                         testID="dateTimePicker"
@@ -682,7 +751,7 @@ const Property = () => {
                                 )}
 
                                 <Text className="font-rubik-medium mb-2">Ghi chú cho người bán:</Text>
-                                <TextInput 
+                                <TextInput
                                     style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 10, height: 80, textAlignVertical: 'top', marginBottom: 20 }}
                                     placeholder="Tôi muốn xem nhà vào buổi sáng..."
                                     multiline
@@ -721,7 +790,7 @@ const Property = () => {
                             </TouchableOpacity>
                         </View>
                     </View>
-                    
+
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         <View className="flex-row p-5 gap-5">
                             {/* Labels Column */}
@@ -737,18 +806,18 @@ const Property = () => {
                             {/* Property Columns */}
                             {compareList.map((item) => (
                                 <View key={item.$id} className="w-48 bg-gray-50 rounded-2xl p-4 shadow-sm border border-gray-100 relative">
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         onPress={() => removeFromCompare(item.$id)}
                                         className="absolute top-2 right-2 z-10 bg-white rounded-full p-1 shadow-sm"
                                     >
                                         <Text className="text-xs text-red-500 font-bold">✕</Text>
                                     </TouchableOpacity>
-                                    
+
                                     <Image source={{ uri: item.image }} className="w-full h-32 rounded-xl mb-3" />
                                     <Text numberOfLines={2} className="font-rubik-bold text-black-300 mb-6 h-12 text-center">
                                         {item.name}
                                     </Text>
-                                    
+
                                     <View className="gap-8">
                                         <Text className="font-rubik-bold text-primary-300 text-center">
                                             {item.price.toLocaleString()}
@@ -761,8 +830,8 @@ const Property = () => {
                                             {item.address}
                                         </Text>
                                     </View>
-                                    
-                                    <TouchableOpacity 
+
+                                    <TouchableOpacity
                                         onPress={() => {
                                             setComparisonModalVisible(false);
                                             router.push(`/properties/${item.$id}`);

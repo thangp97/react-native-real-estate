@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar, TextInput } from 'react-native';
+import {
+    View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar, TextInput, Alert
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalContext } from '@/lib/global-provider';
-import { getMyChats } from '@/lib/api/chat';
+import { getMyChats, deleteChatById } from '@/lib/api/chat'; // Đã import deleteChatById
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -22,12 +24,13 @@ const formatTime = (isoString: string) => {
 
 const ChatListScreen = () => {
     const { user } = useGlobalContext();
-    const [chats, setChats] = useState<any[]>([]); // Danh sách chat gốc
+    const [chats, setChats] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-
-    // --- STATE MỚI CHO TÌM KIẾM ---
     const [searchText, setSearchText] = useState('');
+
+    // --- STATE MỚI CHO LOGIC XÓA ---
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const fetchChats = async () => {
         if (!user) return;
@@ -35,7 +38,7 @@ const ChatListScreen = () => {
             const data = await getMyChats(user.$id);
             setChats(data);
         } catch (error) {
-            console.error(error);
+            console.error("Fetch Chats Error:", error);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -53,7 +56,6 @@ const ChatListScreen = () => {
         fetchChats();
     };
 
-    // --- LOGIC LỌC DỮ LIỆU ---
     const filteredChats = useMemo(() => {
         if (!searchText) return chats;
 
@@ -70,61 +72,104 @@ const ChatListScreen = () => {
         });
     }, [chats, searchText]);
 
+    // --- HÀM XỬ LÝ NHẤN GIỮ (XÓA) ---
+    const handleDeleteChat = (chatId: string, otherUserName: string) => {
+        Alert.alert(
+            "Xác nhận xóa",
+            `Bạn có chắc chắn muốn xóa cuộc trò chuyện với ${otherUserName} không? Hành động này không thể hoàn tác.`,
+            [
+                { text: "Hủy", style: "cancel" },
+                {
+                    text: "Xóa",
+                    style: "destructive",
+                    onPress: async () => {
+                        setDeletingId(chatId);
+                        try {
+                            // Gọi API xóa chat
+                            await deleteChatById(chatId);
 
-    // --- RENDER ITEM ---
-    const renderItem = ({ item }: { item: any }) => (
-        <TouchableOpacity
-            onPress={() => router.push({
-                pathname: '/chat/[id]',
-                params: {
-                    id: item.$id,
-                    otherUserId: item.otherUser?.$id,
-                    otherUserName: item.otherUser?.name,
-                    otherUserAvatar: item.otherUser?.avatar
+                            // Cập nhật State: Lọc bỏ chat đã xóa
+                            setChats(prevChats => prevChats.filter(chat => chat.$id !== chatId));
+                            Alert.alert("Thành công", "Đã xóa cuộc trò chuyện.");
+
+                        } catch (error) {
+                            console.error("DELETE CHAT ERROR:", error);
+                            Alert.alert("Lỗi", "Không thể xóa cuộc trò chuyện. Vui lòng thử lại.");
+                        } finally {
+                            setDeletingId(null);
+                        }
+                    }
                 }
-            })}
-            activeOpacity={0.7}
-            className="flex-row items-center p-4 bg-white mx-4 mb-3 rounded-2xl border border-gray-100 shadow-sm"
-        >
-            {/* Avatar Area */}
-            <View className="relative">
-                <Image
-                    source={{ uri: item.otherUser?.avatar || 'https://via.placeholder.com/100' }}
-                    className="w-14 h-14 rounded-full border-2 border-gray-50"
-                />
-                {/* Giả lập chấm xanh online (thêm vào đây nếu cần) */}
-            </View>
+            ]
+        );
+    };
 
-            {/* Content Area */}
-            <View className="flex-1 ml-4 justify-center">
-                <View className="flex-row justify-between items-center mb-1">
-                    <Text className="text-base font-rubik-bold text-gray-900 flex-1 mr-2" numberOfLines={1}>
-                        {item.otherUser?.name || 'Người dùng ẩn danh'}
-                    </Text>
-                    <Text className="text-xs font-rubik-medium text-gray-400">
-                        {item.lastMessageAt ? formatTime(item.lastMessageAt) : ''}
-                    </Text>
+
+    // --- RENDER ITEM (ĐÃ CHỈNH SỬA) ---
+    const renderItem = ({ item }: { item: any }) => {
+        const isCurrentDeleting = deletingId === item.$id;
+
+        return (
+            <TouchableOpacity
+                onPress={() => router.push({
+                    pathname: '/chat/[id]',
+                    params: {
+                        id: item.$id,
+                        otherUserId: item.otherUser?.$id,
+                        otherUserName: item.otherUser?.name,
+                        otherUserAvatar: item.otherUser?.avatar
+                    }
+                })}
+                onLongPress={() => handleDeleteChat(item.$id, item.otherUser?.name || 'người dùng này')}
+                activeOpacity={isCurrentDeleting ? 1 : 0.7}
+                className="flex-row items-center p-4 bg-white mx-4 mb-3 rounded-2xl border border-gray-100 shadow-sm relative"
+            >
+                {/* Overlay ĐANG XÓA */}
+                {isCurrentDeleting && (
+                    <View className="absolute inset-0 z-50 bg-black/50 items-center justify-center rounded-2xl">
+                        <ActivityIndicator size="small" color="#fff" />
+                        <Text className="text-white mt-2 font-medium">Đang xóa...</Text>
+                    </View>
+                )}
+
+                {/* Avatar Area */}
+                <View className="relative">
+                    <Image
+                        source={{ uri: item.otherUser?.avatar || 'https://via.placeholder.com/100' }}
+                        className="w-14 h-14 rounded-full border-2 border-gray-50"
+                    />
                 </View>
 
-                <View className="flex-row items-center">
-                    <Text
-                        className="text-gray-500 text-sm font-rubik leading-5 flex-1 mr-4"
-                        numberOfLines={1}
-                    >
-                        {item.lastMessage || 'Bắt đầu cuộc trò chuyện...'}
-                    </Text>
+                {/* Content Area */}
+                <View className="flex-1 ml-4 justify-center">
+                    <View className="flex-row justify-between items-center mb-1">
+                        <Text className="text-base font-rubik-bold text-gray-900 flex-1 mr-2" numberOfLines={1}>
+                            {item.otherUser?.name || 'Người dùng ẩn danh'}
+                        </Text>
+                        <Text className="text-xs font-rubik-medium text-gray-400">
+                            {item.lastMessageAt ? formatTime(item.lastMessageAt) : ''}
+                        </Text>
+                    </View>
 
-                    <Ionicons name="chevron-forward" size={18} color="#E5E7EB" />
+                    <View className="flex-row items-center">
+                        <Text
+                            className="text-gray-500 text-sm font-rubik leading-5 flex-1 mr-4"
+                            numberOfLines={1}
+                        >
+                            {item.lastMessage || 'Bắt đầu cuộc trò chuyện...'}
+                        </Text>
+
+                        <Ionicons name="chevron-forward" size={18} color="#E5E7EB" />
+                    </View>
                 </View>
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     // --- EMPTY STATE ---
     const renderEmpty = () => (
         <View className="flex-1 justify-center items-center mt-20 px-10">
-             {/* Hiển thị thông báo tìm kiếm nếu có từ khóa */}
-            {searchText ? (
+             {searchText ? (
                 <View className="items-center">
                      <Ionicons name="search-circle" size={64} color="#9CA3AF" />
                      <Text className="text-lg font-rubik-bold text-gray-800 text-center mt-2">
@@ -185,7 +230,7 @@ const ChatListScreen = () => {
                 </View>
             ) : (
                 <FlatList
-                    data={filteredChats} // Dùng danh sách đã lọc
+                    data={filteredChats}
                     keyExtractor={(item) => item.$id}
                     refreshControl={
                         <RefreshControl

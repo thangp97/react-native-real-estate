@@ -301,7 +301,7 @@ const ReviewPropertyDetailScreen = () => {
                                 className="bg-white p-2 rounded-full border border-blue-100 ml-2"
                             >
                                  <Ionicons name="chatbubble-ellipses-outline" size={20} color="#0061FF" />
-                            </TouchableOpacity>
+                        </TouchableOpacity>
                     </View>
 
                     <CheckboxItem checked={form.isLegalChecked} label="Đã kiểm tra Sổ đỏ / Giấy tờ" onPress={() => updateForm('isLegalChecked', !form.isLegalChecked)}/>

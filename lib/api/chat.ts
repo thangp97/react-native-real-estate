@@ -146,3 +146,18 @@ export async function getMyChats(userId: string) {
         throw error; // Ném lỗi để UI xử lý (nếu có lỗi Permissions)
     }
 }
+
+export async function deleteChatById(chatId: string) {
+    try {
+        await databases.deleteDocument(
+            config.databaseId!,
+            config.chatsCollectionId!, // Giả định có collection chats
+            chatId
+        );
+        // Có thể cần logic xóa tin nhắn liên quan nếu tin nhắn nằm trong collection riêng (Messages)
+        return true;
+    } catch (error) {
+        console.error("API Error - Delete Chat:", error);
+        throw error;
+    }
+}

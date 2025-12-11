@@ -88,7 +88,7 @@ export async function getPropertyById({ id }: { id: string }) {
             config.propertiesCollectionId!,
             id,
             // Corrected: Fetch brokerId info instead of assignedBroker
-            [Query.select(['*', 'brokerId.name', 'brokerId.email', 'brokerId.avatar'])] 
+            [Query.select(['*', 'brokerId.name', 'brokerId.email', 'brokerId.avatar'])]
         );
 
         if (!property) return null;
