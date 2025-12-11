@@ -9,7 +9,9 @@ import {
     TextInput,
     TouchableWithoutFeedback,
     Keyboard,
-    ScrollView
+    ScrollView,
+    Platform,
+    KeyboardAvoidingView
 } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -228,102 +230,114 @@ export default function Explore() {
                 visible={modalVisible}
                 onRequestClose={() => setModalVisible(false)}
             >
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                    <View className="flex-1 justify-end bg-black/50">
-                        <View className="bg-white rounded-t-3xl p-6 h-3/4">
-                            <View className="flex-row justify-between items-center mb-6">
-                                <Text className="text-xl font-rubik-bold text-black-300">Bộ lọc nâng cao</Text>
-                                <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                    <Text className="text-black-200 text-lg">✕</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            <View className="space-y-4">
-                                <View>
-                                    <Text className="text-base font-rubik-medium mb-2">Khu vực / Thành phố</Text>
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                        <View className="flex-row gap-2">
-                                            {cities.map((city) => (
-                                                <TouchableOpacity
-                                                    key={city.value}
-                                                    onPress={() => setTempRegion(city.value)}
-                                                    className={`px-4 py-2 rounded-full border ${
-                                                        tempRegion === city.value 
-                                                            ? 'bg-primary-300 border-primary-300' 
-                                                            : 'bg-white border-primary-200'
-                                                    }`}
-                                                >
-                                                    <Text className={`font-rubik-medium ${
-                                                        tempRegion === city.value ? 'text-white' : 'text-black-300'
-                                                    }`}>
-                                                        {city.label}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </ScrollView>
+                <KeyboardAvoidingView 
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    style={{ flex: 1 }}
+                >
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                        <View className="flex-1 justify-end bg-black/50">
+                            <View className="bg-white rounded-t-3xl h-3/4 w-full overflow-hidden">
+                                {/* Header */}
+                                <View className="flex-row justify-between items-center p-6 border-b border-gray-100 bg-white z-10">
+                                    <Text className="text-xl font-rubik-bold text-black-300">Bộ lọc nâng cao</Text>
+                                    <TouchableOpacity onPress={() => setModalVisible(false)}>
+                                        <Text className="text-black-200 text-lg">✕</Text>
+                                    </TouchableOpacity>
                                 </View>
 
-                                <View>
-                                    <Text className="text-base font-rubik-medium mb-2">Khoảng giá (VNĐ)</Text>
+                                {/* Scrollable Content */}
+                                <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
+                                    <View className="space-y-4 py-4">
+                                        <View>
+                                            <Text className="text-base font-rubik-medium mb-2">Khu vực / Thành phố</Text>
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                                <View className="flex-row gap-2">
+                                                    {cities.map((city) => (
+                                                        <TouchableOpacity
+                                                            key={city.value}
+                                                            onPress={() => setTempRegion(city.value)}
+                                                            className={`px-4 py-2 rounded-full border ${
+                                                                tempRegion === city.value 
+                                                                    ? 'bg-primary-300 border-primary-300' 
+                                                                    : 'bg-white border-primary-200'
+                                                            }`}
+                                                        >
+                                                            <Text className={`font-rubik-medium ${
+                                                                tempRegion === city.value ? 'text-white' : 'text-black-300'
+                                                            }`}>
+                                                                {city.label}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    ))}
+                                                </View>
+                                            </ScrollView>
+                                        </View>
+
+                                        <View>
+                                            <Text className="text-base font-rubik-medium mb-2">Khoảng giá (VNĐ)</Text>
+                                            <View className="flex-row gap-3">
+                                                <TextInput
+                                                    className="flex-1 bg-gray-100 p-5 text-xl rounded-xl font-rubik"
+                                                    placeholder="Tối thiểu"
+                                                    keyboardType="numeric"
+                                                    value={tempMinPrice}
+                                                    onChangeText={setTempMinPrice}
+                                                />
+                                                <TextInput
+                                                    className="flex-1 bg-gray-100 p-5 text-xl rounded-xl font-rubik"
+                                                    placeholder="Tối đa"
+                                                    keyboardType="numeric"
+                                                    value={tempMaxPrice}
+                                                    onChangeText={setTempMaxPrice}
+                                                />
+                                            </View>
+                                        </View>
+
+                                        <View className="mt-4">
+                                            <Text className="text-base font-rubik-medium mb-2">Số phòng ngủ (tối thiểu)</Text>
+                                            <TextInput
+                                                className="flex-1 bg-gray-100 p-5 text-xl rounded-xl font-rubik"
+                                                placeholder="Nhập số phòng ngủ"
+                                                keyboardType="numeric"
+                                                value={tempBedrooms}
+                                                onChangeText={setTempBedrooms}
+                                            />
+                                        </View>
+
+                                        <View className="mt-4">
+                                            <Text className="text-base font-rubik-medium mb-2">Diện tích (m² tối thiểu)</Text>
+                                            <TextInput
+                                                className="flex-1 bg-gray-100 p-5 text-xl rounded-xl font-rubik"
+                                                placeholder="Nhập diện tích"
+                                                keyboardType="numeric"
+                                                value={tempArea}
+                                                onChangeText={setTempArea}
+                                            />
+                                        </View>
+                                    </View>
+                                </ScrollView>
+
+                                {/* Footer Buttons */}
+                                <View className="p-6 border-t border-gray-100 bg-white">
                                     <View className="flex-row gap-3">
-                                        <TextInput
-                                            className="flex-1 bg-gray-100 p-3 rounded-xl font-rubik"
-                                            placeholder="Tối thiểu"
-                                            keyboardType="numeric"
-                                            value={tempMinPrice}
-                                            onChangeText={setTempMinPrice}
-                                        />
-                                        <TextInput
-                                            className="flex-1 bg-gray-100 p-3 rounded-xl font-rubik"
-                                            placeholder="Tối đa"
-                                            keyboardType="numeric"
-                                            value={tempMaxPrice}
-                                            onChangeText={setTempMaxPrice}
-                                        />
+                                        <TouchableOpacity 
+                                            onPress={handleResetFilters}
+                                            className="flex-1 bg-gray-100 p-4 rounded-full"
+                                        >
+                                            <Text className="text-center font-rubik-bold text-black-300">Đặt lại</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity 
+                                            onPress={handleApplyFilters}
+                                            className="flex-1 bg-primary-300 p-4 rounded-full"
+                                        >
+                                            <Text className="text-center font-rubik-bold text-white">Áp dụng</Text>
+                                        </TouchableOpacity>
                                     </View>
                                 </View>
-
-                                <View className="mt-4">
-                                    <Text className="text-base font-rubik-medium mb-2">Số phòng ngủ (tối thiểu)</Text>
-                                    <TextInput
-                                        className="flex-1 bg-gray-100 p-3 rounded-xl font-rubik"
-                                        placeholder="Nhập số phòng ngủ"
-                                        keyboardType="numeric"
-                                        value={tempBedrooms}
-                                        onChangeText={setTempBedrooms}
-                                    />
-                                </View>
-
-                                <View className="mt-4">
-                                    <Text className="text-base font-rubik-medium mb-2">Diện tích (m² tối thiểu)</Text>
-                                    <TextInput
-                                        className="flex-1 bg-gray-100 p-3 rounded-xl font-rubik"
-                                        placeholder="Nhập diện tích"
-                                        keyboardType="numeric"
-                                        value={tempArea}
-                                        onChangeText={setTempArea}
-                                    />
-                                </View>
-                            </View>
-
-                            <View className="flex-row gap-3 mt-8">
-                                <TouchableOpacity 
-                                    onPress={handleResetFilters}
-                                    className="flex-1 bg-gray-100 p-4 rounded-full"
-                                >
-                                    <Text className="text-center font-rubik-bold text-black-300">Đặt lại</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    onPress={handleApplyFilters}
-                                    className="flex-1 bg-primary-300 p-4 rounded-full"
-                                >
-                                    <Text className="text-center font-rubik-bold text-white">Áp dụng</Text>
-                                </TouchableOpacity>
                             </View>
                         </View>
-                    </View>
-                </TouchableWithoutFeedback>
+                    </TouchableWithoutFeedback>
+                </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );

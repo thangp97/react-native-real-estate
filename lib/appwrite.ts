@@ -1,5 +1,5 @@
-import {Account, Avatars, Client, Databases, ID, Storage, OAuthProvider, AppwriteException} from "react-native-appwrite";
 import * as Linking from 'expo-linking';
+import { Account, AppwriteException, Avatars, Client, Databases, ID, OAuthProvider, Storage } from "react-native-appwrite";
 
 export const config = {
     endpoint: process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT,
@@ -13,9 +13,10 @@ export const config = {
     galleriesCollectionId: 'galleries',
     bookingsCollectionId: 'bookings',
     notificationsCollectionId: 'notifications',
-    chatsCollectionId: 'ID_CUA_BANG_CHATS', // <--- Thay ID thật vào đây
     messagesCollectionId: 'messages',
     chatsCollectionId: 'chats'
+    priceHistoryCollectionId: 'price_history',
+    reviewsCollectionId: 'reviews', // Collection đánh giá
 }
 
 export const client = new Client();
@@ -30,7 +31,7 @@ export const avatar = new Avatars(client);
 export const databases = new Databases(client);
 export const storage = new Storage(client);
 
-export async function createUser(email: string, password: string, username: string, role: string) {
+export async function createUser(email: string, password: string, username: string, role: string, region?: string) {
     let newAccount;
     try {
         newAccount = await account.create(ID.unique(), email, password, username);
@@ -55,20 +56,24 @@ export async function createUser(email: string, password: string, username: stri
     } catch (error) {
         console.error("Lỗi khi tạo session sau khi đăng ký:", error);
     }
-    
-    // DEV ONLY: Tạm thời vô hiệu hóa việc gửi email xác thực
-    // try {
-    //     await account.createVerification(Linking.createURL('/verification'));
-    // } catch (error) {
-    //     console.error("Lỗi khi gửi email xác thực:", error);
-    // }
 
     try {
+        const profileData: any = {
+            role: role,
+            name: username,
+            email: email,
+            credits: 10 // **GÁN CREDITS MẶC ĐỊNH**
+        };
+
+        if (region) {
+            profileData.region = region;
+        }
+
         const profile = await databases.createDocument(
             config.databaseId!, 
             config.profilesCollectionId!, 
             newAccount.$id, 
-            { role: role, name: username, email: email }
+            profileData
         );
         return profile;
     } catch (error: any) {
@@ -108,22 +113,40 @@ export async function getCurrentUser() {
         const currentAccount = await account.get();
         if (!currentAccount) return null;
 
+        // Lấy profile từ profiles collection theo userId (so sánh theo email thông qua userId)
         const userProfile = await databases.getDocument(config.databaseId!, config.profilesCollectionId!, currentAccount.$id);
         
         return { 
-            ...currentAccount, 
+            $id: currentAccount.$id,
+            email: currentAccount.email,
+            name: userProfile.name || currentAccount.name,
             role: userProfile.role,
-            avatar: userProfile.avatar,
+            avatar: userProfile.avatar || currentAccount.avatar,
+            credits: userProfile.credits,
+            favorites: userProfile.favorites || [], // Lấy danh sách yêu thích
+            region: userProfile.region // Lấy thông tin vùng hoạt động của môi giới
         };
 
     } catch (error: any) {
         if (error.code !== 401) {
-             console.log("Lỗi getCurrentUser:", error);
+            console.log("Lỗi getCurrentUser:", error);
         }
         return null;
     }
 }
 
+
+// ... other functions
+
+export async function getUserProfileById(userId: string) {
+    try {
+        const userProfile = await databases.getDocument(config.databaseId!, config.profilesCollectionId!, userId);
+        return userProfile;
+    } catch (error) {
+        console.error("Lỗi khi lấy hồ sơ người dùng theo ID:", error);
+        return null;
+    }
+}
 
 export async function signOut() {
     try {
@@ -150,11 +173,16 @@ export async function updateUserProfile(userId: string, data: object) {
 }
 
 export async function uploadFile(file: any) {
-    if (!file) return;
+    if (!file) return null;
 
     try {
-        const { mimeType, ...rest } = file;
-        const asset = { type: mimeType, ...rest };
+        // Xử lý file từ ImagePicker
+        const asset: any = {
+            name: file.fileName || file.name || `${ID.unique()}.jpg`,
+            type: file.mimeType || file.type || 'image/jpeg',
+            size: file.fileSize || file.size || 0,
+            uri: file.uri
+        };
 
         const uploadedFile = await storage.createFile(
             config.storageId!,
@@ -162,15 +190,61 @@ export async function uploadFile(file: any) {
             asset
         );
 
-        const fileUrl = await storage.getFileView(
-            config.storageId!,
-            uploadedFile.$id
-        );
+        if (!uploadedFile || !uploadedFile.$id) {
+            throw new Error("Không thể tạo file trên server.");
+        }
+
+        // Tạo URL view cho file
+        const fileUrl = `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
 
         return fileUrl;
-    } catch (error) {
+    } catch (error: any) {
         console.error("Lỗi upload file:", error);
+        throw new Error(error.message || "Không thể tải file lên server.");
+    }
+}
+
+export async function updateCredit(userId: string, amount: number) {
+    try {
+        const userProfile = await databases.getDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            userId
+        );
+
+        const currentCredits = userProfile.credits || 0;
+        const newCredits = currentCredits + amount;
+
+        await databases.updateDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            userId,
+            { credits: newCredits }
+        );
+
+        return newCredits;
+    } catch (error) {
+        console.error('Lỗi cập nhật credits:', error);
         throw error;
     }
 }
 
+export async function updatePassword(oldPassword: string, newPassword: string) {
+    try {
+        // Cập nhật mật khẩu trong Appwrite Account
+        await account.updatePassword(newPassword, oldPassword);
+        return true;
+    } catch (error: any) {
+        console.error('Lỗi đổi mật khẩu:', error);
+        if (error instanceof AppwriteException) {
+            if (error.code === 401) {
+                throw new Error("Mật khẩu cũ không chính xác.");
+            } else if (error.code === 400) {
+                if (error.message.includes('Password')) {
+                    throw new Error("Mật khẩu mới phải có ít nhất 8 ký tự.");
+                }
+            }
+        }
+        throw new Error(error.message || "Không thể đổi mật khẩu. Vui lòng thử lại.");
+    }
+}

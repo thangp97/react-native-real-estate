@@ -1,6 +1,28 @@
 import { databases, config, storage } from "../appwrite";
 import { Query, ID } from "react-native-appwrite";
 
+export async function getPropertiesByBrokerId(agentId: string) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [
+                Query.or([
+                    Query.equal('status', 'approved'),
+                    Query.equal('status', 'deposit_paid'),
+                    Query.equal('status', 'sold')
+                ]),
+                Query.orderDesc('$createdAt'),
+                Query.limit(100) // Adjust limit as needed
+            ]
+        );
+        return result.documents;
+    } catch (error) {
+        console.error("Lỗi lấy danh sách bất động sản của broker:", error);
+        return [];
+    }
+}
+
 export async function getAgentById({ agentId }: { agentId: string }) {
     if (!agentId) return null;
     try {
@@ -11,13 +33,18 @@ export async function getAgentById({ agentId }: { agentId: string }) {
     }
 }
 
-export async function getBrokerStats(userId: string) {
+export async function getBrokerStats(userId: string, region?: string) {
     try {
-            // 1. Đếm số tin đang chờ duyệt trên toàn hệ thống (Work Queue)
+            // 1. Đếm số tin đang chờ duyệt (Work Queue) - Có lọc theo region
+            const pendingQueries = [Query.equal('status', 'available')];
+            if (region) {
+                pendingQueries.push(Query.equal('region', region));
+            }
+
             const pendingDocs = await databases.listDocuments(
                 config.databaseId!,
                 config.propertiesCollectionId!,
-                [Query.equal('status', 'available')]
+                pendingQueries
             );
 
             // 2. Đếm số tin BẠN đang quản lý (Active Work)
@@ -56,13 +83,15 @@ export async function getBrokerStats(userId: string) {
         }
 }
 
-export async function getBrokerRecentProperties(userId: string) {
+export async function getBrokerRecentProperties(userId: string, region: string) {
     try {
+        if (!region) return [];
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
             [
-                Query.equal('status', 'available'), // FIX: Dùng giá trị thật
+                Query.equal('status', 'available'),
+                Query.equal('region', region), // Filter by region
                 Query.orderDesc('$createdAt'),
                 Query.limit(5)
             ]
@@ -149,13 +178,85 @@ export async function finalizeVerification(
     }
 }
 
-export async function getAllPendingProperties() {
+import { ID } from "react-native-appwrite"; // Đảm bảo import ID
+
+export async function updatePropertyPrice(propertyId: string, newPrice: number, changedBy: string) {
     try {
+        // 1. Cập nhật giá trong Properties
+        await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            { price: newPrice }
+        );
+
+        // 2. Lưu lịch sử giá
+        try {
+            await databases.createDocument(
+                config.databaseId!,
+                config.priceHistoryCollectionId!,
+                ID.unique(),
+                {
+                    propertyId,
+                    price: newPrice,
+                    changedBy,
+                    changedAt: new Date().toISOString()
+                }
+            );
+        } catch (hError) {
+            console.log("Lỗi lưu lịch sử giá (có thể do chưa tạo collection price_history):", hError);
+        }
+
+        return true;
+    } catch (error) {
+        console.error("Lỗi cập nhật giá:", error);
+        throw error;
+    }
+}
+
+export async function getUserByEmail(email: string) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            [Query.equal('email', email)]
+        );
+        if (result.total > 0) return result.documents[0];
+        return null;
+    } catch (error) {
+        console.error("Lỗi tìm user bằng email:", error);
+        return null;
+    }
+}
+
+export async function markPropertyAsSold(propertyId: string, buyerId: string) {
+    try {
+        const result = await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            {
+                status: 'sold',
+                buyerId: buyerId // Lưu ID người mua để cấp quyền đánh giá
+            }
+        );
+        return result;
+    } catch (error) {
+        console.error("Lỗi đánh dấu đã bán:", error);
+        throw error;
+    }
+}
+
+export async function getAllPendingProperties(region: string) {
+    try {
+        if (!region) return [];
+        
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
             [
                 Query.equal('status', 'available'),
+                Query.equal('region', region), // Chỉ lấy BĐS cùng vùng với Broker
                 Query.orderDesc('$createdAt'),
                 Query.limit(100)
             ]

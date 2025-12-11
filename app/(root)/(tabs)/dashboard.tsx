@@ -59,8 +59,8 @@ const BrokerDashboard = () => {
 
         try {
             const [statsData, pendingData] = await Promise.all([
-                getBrokerStats(user.$id),
-                getBrokerRecentProperties(user.$id)
+                getBrokerStats(user.$id, user.region!),
+                getBrokerRecentProperties(user.$id, user.region!)
             ]);
 
             // Log để kiểm tra xem promise có resolve thành công không

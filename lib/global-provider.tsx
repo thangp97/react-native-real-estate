@@ -1,5 +1,5 @@
-import { createContext, useContext, ReactNode } from "react";
 import { useAppwrite } from "@/lib/useAppwrite";
+import { createContext, ReactNode, useContext } from "react";
 import { getCurrentUser } from "./appwrite";
 
 interface User {
@@ -8,14 +8,16 @@ interface User {
     email: string;
     avatar: string;
     role: string;
+    credits?: number; // Credit for sellers
     favorites?: string[]; // Add favorites
+    region?: string; // Add region for brokers
 }
 
 interface GlobalContextType {
     isLoggedIn: boolean;
     user: User | null;
     loading: boolean;
-    refetch: (newParams?: Record<string, string | number>) => Promise<void>;
+    refetch: (newParams: Record<string, string | number>) => Promise<void>;
     setUser?: (user: User) => void; // Add setUser
 }
 

@@ -1,5 +1,5 @@
-import { databases, config, storage } from "../appwrite";
-import { Query, ID } from "react-native-appwrite";
+import { ID, Query } from "react-native-appwrite";
+import { config, databases, storage } from "../appwrite";
 
 export async function getUserProperties({ userId }: { userId: string }) {
     if (!userId) return [];
@@ -20,8 +20,6 @@ export async function getMyActiveProperties(userId: string) {
             config.propertiesCollectionId!,
             [
                 Query.equal('brokerId', userId), // Lọc theo ID của Broker
-                Query.notEqual('status', 'sold'), // Loại bỏ các tin đã bán
-                Query.notEqual('status', 'rejected'), // Loại bỏ các tin bị từ chối
                 Query.orderDesc('$updatedAt'), // Tin được cập nhật gần nhất lên đầu
             ]
         );
@@ -82,6 +80,181 @@ export async function deleteProperty({ propertyId }: { propertyId: string }) {
         return true;
     } catch (error: any) {
         console.error("Lỗi khi xóa bất động sản:", error);
+        throw new Error(error.message);
+    }
+}
+
+export async function getSellerData({ userId }: { userId: string }) {
+    if (!userId) return null;
+    try {
+        const result = await databases.getDocument(config.databaseId!, config.profilesCollectionId!, userId);
+        return result;
+    } catch (e: any) {
+        console.error("Lỗi khi lấy dữ liệu người bán:", e);
+        return null;
+    }
+}
+
+export async function topUpCredit({ userId, amount }: { userId: string, amount: number }) {
+    if (!userId || amount <= 0) throw new Error("Cần có ID người dùng và số credit hợp lệ");
+    
+    try {
+        const seller: any = await getSellerData({ userId });
+        if (!seller) {
+            throw new Error("Không tìm thấy người dùng.");
+        }
+
+        const newCredits = (seller.credits || 0) + amount;
+
+        await databases.updateDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            userId,
+            { credits: newCredits }
+        );
+
+        return newCredits;
+    } catch (error: any) {
+        console.error("Lỗi khi nạp credit:", error);
+        throw new Error(error.message);
+    }
+}
+
+export async function renewProperty({ propertyId, currentExpiry, sellerId, days }: { propertyId: string, currentExpiry: Date, sellerId: string, days: number }) {
+    if (!propertyId || !currentExpiry || !sellerId || !days || days <= 0) {
+        throw new Error("Cần có ID bất động sản, ngày hết hạn hiện tại, ID người bán và số ngày gia hạn hợp lệ");
+    }
+
+    try {
+        const seller: any = await getSellerData({ userId: sellerId });
+        if (!seller || seller.credits < days) {
+            throw new Error(`Không đủ credits để gia hạn ${days} ngày. Bạn cần ${days} credits nhưng chỉ có ${seller?.credits || 0} credits.`);
+        }
+
+        const newExpiryDate = new Date(currentExpiry);
+        newExpiryDate.setDate(newExpiryDate.getDate() + days);
+
+        await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            { expiresAt: newExpiryDate.toISOString() }
+        );
+
+        await databases.updateDocument(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            sellerId,
+            { credits: seller.credits - days }
+        );
+
+        return true;
+    } catch (error: any) {
+        console.error("Lỗi khi gia hạn bất động sản:", error);
+        throw new Error(error.message);
+    }
+}
+
+/**
+ * Lưu lịch sử thay đổi giá vào database
+ */
+async function savePriceHistory({ 
+    propertyId, 
+    oldPrice, 
+    newPrice, 
+    changedBy, 
+    reason 
+}: { 
+    propertyId: string, 
+    oldPrice: number, 
+    newPrice: number, 
+    changedBy: string,
+    reason?: string 
+}) {
+    try {
+        await databases.createDocument(
+            config.databaseId!,
+            config.priceHistoryCollectionId!,
+            ID.unique(),
+            {
+                propertyId: propertyId,
+                oldPrice: oldPrice,
+                newPrice: newPrice,
+                changedBy: changedBy,
+                reason: reason || 'Cập nhật giá từ môi giới',
+                changedAt: new Date().toISOString()
+            }
+        );
+    } catch (error: any) {
+        console.error("Lỗi khi lưu lịch sử giá:", error);
+        // Không throw error để không ảnh hưởng đến việc cập nhật giá
+    }
+}
+
+/**
+ * Lấy lịch sử thay đổi giá của một bất động sản
+ */
+export async function getPriceHistory({ propertyId }: { propertyId: string }) {
+    if (!propertyId) return [];
+    
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.priceHistoryCollectionId!,
+            [
+                Query.equal('propertyId', propertyId),
+                Query.orderDesc('$createdAt') // Sắp xếp mới nhất trước
+            ]
+        );
+        return result.documents;
+    } catch (error: any) {
+        console.error("Lỗi khi lấy lịch sử giá:", error);
+        return [];
+    }
+}
+
+export async function acceptProposedPrice({ propertyId, proposedPrice, userId }: { 
+    propertyId: string, 
+    proposedPrice: number,
+    userId: string 
+}) {
+    if (!propertyId || !proposedPrice || !userId) {
+        throw new Error("Cần có ID bất động sản, giá gợi ý và ID người dùng");
+    }
+
+    try {
+        // Lấy giá cũ trước khi cập nhật
+        const property: any = await databases.getDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId
+        );
+        
+        const oldPrice = property.price || 0;
+
+        // Cập nhật giá mới
+        await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            { 
+                price: proposedPrice,
+                proposedPrice: null
+            }
+        );
+
+        // Lưu lịch sử thay đổi giá
+        await savePriceHistory({
+            propertyId,
+            oldPrice,
+            newPrice: proposedPrice,
+            changedBy: userId,
+            reason: 'Chấp nhận giá gợi ý từ môi giới'
+        });
+
+        return true;
+    } catch (error: any) {
+        console.error("Lỗi khi cập nhật giá gợi ý:", error);
         throw new Error(error.message);
     }
 }
