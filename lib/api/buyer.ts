@@ -222,6 +222,35 @@ export async function createBooking({ userId, agentId, propertyId, date, note }:
                 status: 'pending'
             }
         );
+
+        // Tạo thông báo cho agent (broker hoặc seller)
+        try {
+            const { createNotification } = await import('./notifications');
+            const property = await databases.getDocument(
+                config.databaseId!,
+                config.propertiesCollectionId!,
+                propertyId
+            );
+            const propertyName = property.name || 'Bất động sản';
+            const formattedDate = new Date(date).toLocaleString('vi-VN', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            await createNotification({
+                userId: agentId,
+                message: `Bạn có yêu cầu đặt lịch hẹn xem "${propertyName}" vào ${formattedDate}`,
+                type: 'booking_created',
+                relatedPropertyId: propertyId
+            });
+        } catch (notifError) {
+            console.warn("Không thể tạo thông báo:", notifError);
+            // Không throw error để không ảnh hưởng đến việc tạo booking
+        }
+
         return booking;
     } catch (error) {
         console.error("Lỗi tạo lịch hẹn:", error);
