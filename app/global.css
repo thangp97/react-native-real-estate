@@ -1,3 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  .font-rubik {
+    @apply font-normal;
+    font-family: System;
+  }
+  .font-rubik-bold {
+    @apply font-bold;
+    font-family: System;
+  }
+  .font-rubik-extrabold {
+    @apply font-extrabold;
+    font-family: System;
+  }
+  .font-rubik-medium {
+    @apply font-medium;
+    font-family: System;
+  }
+  .font-rubik-semibold {
+    @apply font-semibold;
+    font-family: System;
+  }
+  .font-rubik-light {
+    @apply font-light;
+    font-family: System;
+  }
+}

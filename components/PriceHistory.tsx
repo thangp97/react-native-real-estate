@@ -1,6 +1,7 @@
 import { getPriceHistory } from '@/lib/api/seller';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, Dimensions, ScrollView } from 'react-native';
+import { formatCurrency } from '@/lib/utils';
 
 interface PriceHistoryRecord {
     $id: string;
@@ -17,6 +18,31 @@ interface PriceHistoryProps {
     propertyId: string;
 }
 
+const ChartBar = ({ price, maxPrice, minPrice, date, isLatest }: { price: number, maxPrice: number, minPrice: number, date: string, isLatest: boolean }) => {
+    // Tính toán chiều cao tương đối
+    // Base height là 20% để cột không quá thấp
+    const range = maxPrice - minPrice || 1; // Avoid divide by zero
+    const relativeHeight = ((price - minPrice) / range) * 60 + 20; // 20% -> 80% height
+
+    return (
+        <View style={styles.chartBarContainer}>
+            <Text style={styles.chartBarLabel}>
+                {(price / 1000000000).toFixed(1)}T
+            </Text>
+            <View 
+                style={[
+                    styles.chartBar, 
+                    { height: `${relativeHeight}%` },
+                    isLatest ? styles.chartBarLatest : styles.chartBarNormal
+                ]} 
+            />
+            <Text style={styles.chartDateLabel}>
+                {new Date(date).toLocaleDateString('vi-VN', { month: 'numeric', year: '2-digit' })}
+            </Text>
+        </View>
+    );
+};
+
 export default function PriceHistory({ propertyId }: PriceHistoryProps) {
     const [history, setHistory] = useState<PriceHistoryRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -25,7 +51,11 @@ export default function PriceHistory({ propertyId }: PriceHistoryProps) {
         try {
             setLoading(true);
             const data = await getPriceHistory({ propertyId });
-            setHistory(data as unknown as PriceHistoryRecord[]);
+            // Sort by date ascending for the chart
+            const sortedData = (data as unknown as PriceHistoryRecord[]).sort((a, b) => 
+                new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime()
+            );
+            setHistory(sortedData);
         } catch (error) {
             console.error('Lỗi khi tải lịch sử giá:', error);
         } finally {
@@ -40,7 +70,7 @@ export default function PriceHistory({ propertyId }: PriceHistoryProps) {
     if (loading) {
         return (
             <View style={styles.container}>
-                <ActivityIndicator size="large" color="#007BFF" />
+                <ActivityIndicator size="large" color="#0061FF" />
             </View>
         );
     }
@@ -48,178 +78,220 @@ export default function PriceHistory({ propertyId }: PriceHistoryProps) {
     if (history.length === 0) {
         return (
             <View style={styles.container}>
-                <Text style={styles.emptyText}>Chưa có lịch sử thay đổi giá</Text>
+                <Text style={styles.title}>Biến động giá</Text>
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>Chưa có dữ liệu biến động giá</Text>
+                </View>
             </View>
         );
     }
 
+    // Chart Data Preparation
+    // Lấy giá trị ban đầu (oldPrice của record đầu tiên) + newPrice của tất cả record
+    const chartPoints = [
+        { 
+            price: history[0].oldPrice, 
+            date: history[0].changedAt, 
+            id: 'initial' 
+        },
+        ...history.map(h => ({ 
+            price: h.newPrice, 
+            date: h.changedAt, 
+            id: h.$id 
+        }))
+    ];
+
+    const prices = chartPoints.map(p => p.price);
+    const maxPrice = Math.max(...prices);
+    const minPrice = Math.min(...prices);
+
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>📊 Lịch sử thay đổi giá</Text>
-            {history.map((record) => {
-                const priceChange = record.newPrice - record.oldPrice;
-                const priceChangePercent = ((priceChange / record.oldPrice) * 100);
-                const priceChangePercentFormatted = Math.abs(priceChangePercent).toFixed(2);
-                const isIncrease = priceChange > 0;
-
-                return (
-                    <View key={record.$id} style={styles.historyCard}>
-                        <View style={styles.headerRow}>
-                            <Text style={styles.dateText}>
-                                {new Date(record.changedAt).toLocaleString('vi-VN', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                })}
-                            </Text>
-                            <View style={[
-                                styles.changeBadge,
-                                isIncrease ? styles.increaseBadge : styles.decreaseBadge
-                            ]}>
-                                <Text style={styles.changeText}>
-                                    {isIncrease ? '↑' : '↓'} {priceChangePercentFormatted}%
-                                </Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.priceRow}>
-                            <View style={styles.priceItem}>
-                                <Text style={styles.priceLabel}>Giá cũ:</Text>
-                                <Text style={styles.oldPrice}>
-                                    {record.oldPrice.toLocaleString('vi-VN')} VND
-                                </Text>
-                            </View>
-                            <Text style={styles.arrow}>→</Text>
-                            <View style={styles.priceItem}>
-                                <Text style={styles.priceLabel}>Giá mới:</Text>
-                                <Text style={styles.newPrice}>
-                                    {record.newPrice.toLocaleString('vi-VN')} VND
-                                </Text>
-                            </View>
-                        </View>
-
-                        {record.reason && (
-                            <View style={styles.reasonContainer}>
-                                <Text style={styles.reasonLabel}>Lý do:</Text>
-                                <Text style={styles.reasonText}>{record.reason}</Text>
-                            </View>
-                        )}
-
-                        <View style={styles.divider} />
+            <Text style={styles.title}>Biến động giá</Text>
+            
+            {/* Chart Area */}
+            <View style={styles.chartContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.chartInner}>
+                        {chartPoints.map((point, index) => (
+                            <ChartBar 
+                                key={point.id}
+                                price={point.price}
+                                maxPrice={maxPrice}
+                                minPrice={minPrice}
+                                date={point.date}
+                                isLatest={index === chartPoints.length - 1}
+                            />
+                        ))}
                     </View>
-                );
-            })}
+                </ScrollView>
+            </View>
+
+            {/* Detailed List (Reversed for timeline view) */}
+            <View style={styles.listContainer}>
+                {[...history].reverse().map((record) => {
+                    const priceChange = record.newPrice - record.oldPrice;
+                    const priceChangePercent = ((priceChange / record.oldPrice) * 100);
+                    const isIncrease = priceChange > 0;
+
+                    return (
+                        <View key={record.$id} style={styles.historyCard}>
+                            <View style={styles.row}>
+                                <Text style={styles.dateText}>
+                                    {new Date(record.changedAt).toLocaleDateString('vi-VN')}
+                                </Text>
+                                <View style={[
+                                    styles.badge,
+                                    isIncrease ? styles.badgeIncrease : styles.badgeDecrease
+                                ]}>
+                                    <Text style={[
+                                        styles.badgeText,
+                                        isIncrease ? styles.textIncrease : styles.textDecrease
+                                    ]}>
+                                        {isIncrease ? '▲' : '▼'} {Math.abs(priceChangePercent).toFixed(1)}%
+                                    </Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.priceRow}>
+                                <Text style={styles.oldPrice}>
+                                    {formatCurrency(record.oldPrice)}
+                                </Text>
+                                <Text style={styles.arrow}>→</Text>
+                                <Text style={styles.newPrice}>
+                                    {formatCurrency(record.newPrice)}
+                                </Text>
+                            </View>
+                            
+                            {record.reason && (
+                                <Text style={styles.reasonText}>"{record.reason}"</Text>
+                            )}
+                        </View>
+                    );
+                })}
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
-        padding: 0,
-        backgroundColor: 'transparent',
+        marginTop: 24,
+        paddingHorizontal: 0,
     },
     title: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#333',
+        color: '#191D31',
         marginBottom: 16,
     },
-    emptyText: {
-        fontSize: 14,
-        color: '#999',
-        textAlign: 'center',
-        marginTop: 20,
+    chartContainer: {
+        height: 180,
+        backgroundColor: '#F8F9FA',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 20,
+    },
+    chartInner: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        height: '100%',
+        minWidth: '100%',
+        gap: 12,
+    },
+    chartBarContainer: {
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        width: 40,
+        height: '100%',
+    },
+    chartBar: {
+        width: 12,
+        borderRadius: 6,
+        backgroundColor: '#E2E8F0',
+    },
+    chartBarLatest: {
+        backgroundColor: '#0061FF',
+        width: 16,
+    },
+    chartBarNormal: {
+        backgroundColor: '#94A3B8',
+    },
+    chartBarLabel: {
+        fontSize: 10,
+        color: '#64748B',
+        marginBottom: 4,
+        fontWeight: '600',
+    },
+    chartDateLabel: {
+        fontSize: 10,
+        color: '#94A3B8',
+        marginTop: 8,
+    },
+    listContainer: {
+        gap: 12,
     },
     historyCard: {
-        backgroundColor: '#fff',
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
         borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        padding: 12,
     },
-    headerRow: {
+    row: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 8,
     },
     dateText: {
-        fontSize: 14,
-        color: '#666',
-        fontWeight: '500',
-    },
-    changeBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    increaseBadge: {
-        backgroundColor: '#d4edda',
-    },
-    decreaseBadge: {
-        backgroundColor: '#f8d7da',
-    },
-    changeText: {
+        color: '#64748B',
         fontSize: 12,
-        fontWeight: 'bold',
-        color: '#155724',
     },
+    badge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    badgeIncrease: { backgroundColor: '#DCFCE7' },
+    badgeDecrease: { backgroundColor: '#FEE2E2' },
+    badgeText: { fontSize: 12, fontWeight: 'bold' },
+    textIncrease: { color: '#16A34A' },
+    textDecrease: { color: '#DC2626' },
     priceRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 12,
-    },
-    priceItem: {
-        flex: 1,
-    },
-    priceLabel: {
-        fontSize: 12,
-        color: '#999',
-        marginBottom: 4,
+        gap: 8,
     },
     oldPrice: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#666',
+        textDecorationLine: 'line-through',
+        color: '#94A3B8',
+        fontSize: 14,
     },
     arrow: {
-        fontSize: 20,
-        color: '#007BFF',
-        marginHorizontal: 12,
+        color: '#64748B',
     },
     newPrice: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: 'bold',
-        color: '#007BFF',
-    },
-    reasonContainer: {
-        marginTop: 8,
-        paddingTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: '#e0e0e0',
-    },
-    reasonLabel: {
-        fontSize: 12,
-        color: '#999',
-        marginBottom: 4,
+        color: '#191D31',
     },
     reasonText: {
-        fontSize: 14,
-        color: '#333',
+        marginTop: 8,
+        fontSize: 12,
         fontStyle: 'italic',
+        color: '#64748B',
     },
-    divider: {
-        height: 1,
-        backgroundColor: '#e0e0e0',
-        marginTop: 12,
+    emptyContainer: {
+        backgroundColor: '#F8F9FA',
+        padding: 20,
+        borderRadius: 12,
+        alignItems: 'center',
     },
+    emptyText: {
+        color: '#94A3B8',
+        fontSize: 14,
+        fontStyle: 'italic',
+    }
 });
 

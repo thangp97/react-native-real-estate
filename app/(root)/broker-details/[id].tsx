@@ -7,11 +7,12 @@ import {
     Linking,
     Alert,
     ActivityIndicator,
-    FlatList
+    FlatList,
+    StyleSheet
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 
 import icons from "@/constants/icons";
 import images from "@/constants/images";
@@ -19,6 +20,25 @@ import { useAppwrite } from "@/lib/useAppwrite";
 import { getAgentById, getPropertiesByBrokerId } from "@/lib/api/broker";
 import { getReviewsByAgentId } from "@/lib/api/rating";
 import { Card } from "@/components/Cards";
+import { formatCurrency } from "@/lib/utils";
+
+const RatingBar = ({ star, count, total }: { star: number, count: number, total: number }) => {
+    const percentage = total > 0 ? (count / total) * 100 : 0;
+    
+    return (
+        <View className="flex-row items-center gap-3 mb-1">
+            <Text className="text-gray-500 font-rubik-medium w-3">{star}</Text>
+            <Image source={icons.star} className="w-3 h-3" tintColor="#F59E0B" />
+            <View className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <View 
+                    style={{ width: `${percentage}%` }} 
+                    className="h-full bg-yellow-400 rounded-full" 
+                />
+            </View>
+            <Text className="text-gray-400 text-xs w-8 text-right">{percentage.toFixed(0)}%</Text>
+        </View>
+    );
+};
 
 const BrokerDetails = () => {
     const { id } = useLocalSearchParams<{ id?: string }>();
@@ -61,10 +81,21 @@ const BrokerDetails = () => {
         }
     }, [id]);
 
+    const ratingStats = useMemo(() => {
+        const stats = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+        if (!reviews) return stats;
+        
+        reviews.forEach((r: any) => {
+            const rating = Math.round(r.rating) as 1 | 2 | 3 | 4 | 5;
+            if (stats[rating] !== undefined) stats[rating]++;
+        });
+        return stats;
+    }, [reviews]);
+
     const handleContact = (method: 'call' | 'sms' | 'email' = 'call') => {
         if (!broker) return;
 
-        const phone = broker.phone || "N/A";
+        const phone = broker.phoneNumber || "N/A";
         const email = broker.email || "N/A";
 
         if (method === 'email') {
@@ -160,14 +191,7 @@ const BrokerDetails = () => {
                         {agentEmail}
                     </Text>
 
-                    {/* Rating Badge */}
-                    <View className="flex-row items-center mt-2 bg-yellow-100 px-3 py-1 rounded-full">
-                        <Image source={icons.star} className="w-4 h-4 mr-1" tintColor="#F59E0B" />
-                        <Text className="font-rubik-bold text-yellow-700">
-                            {agentRating} ({agentReviewCount} đánh giá)
-                        </Text>
-                    </View>
-
+                    {/* Contact Buttons */}
                     <View className="flex-row mt-5 gap-4">
                         <TouchableOpacity
                             onPress={() => handleContact('call')}
@@ -188,9 +212,13 @@ const BrokerDetails = () => {
 
                 {/* Properties Section */}
                 <View className="mt-2 px-5">
-                    <Text className="text-xl font-rubik-bold text-black-300 mb-4">
-                        Bất động sản đang bán ({brokerProperties?.length || 0})
-                    </Text>
+                    <View className="flex-row justify-between items-center mb-4">
+                        <Text className="text-xl font-rubik-bold text-black-300">
+                            Bất động sản đang bán
+                        </Text>
+                        <Text className="text-primary-300 font-rubik-bold">{brokerProperties?.length || 0}</Text>
+                    </View>
+                    
                     {(!brokerProperties || brokerProperties.length === 0) ? (
                         <Text className="text-gray-500 font-rubik-medium text-center py-5 bg-gray-50 rounded-lg">
                             Hiện không có bất động sản nào.
@@ -217,8 +245,37 @@ const BrokerDetails = () => {
                 {/* Reviews Section */}
                 <View className="mt-7 px-5 pb-10">
                     <Text className="text-xl font-rubik-bold text-black-300 mb-4">
-                        Đánh giá từ khách hàng ({reviews?.length || 0})
+                        Đánh giá & Nhận xét
                     </Text>
+
+                    {/* Summary Card */}
+                    <View className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm mb-6 flex-row gap-6">
+                        <View className="items-center justify-center">
+                            <Text className="text-4xl font-rubik-extrabold text-black-300">{agentRating.toFixed(1)}</Text>
+                            <View className="flex-row mt-1">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                    <Image 
+                                        key={s} 
+                                        source={icons.star} 
+                                        className="w-3 h-3" 
+                                        tintColor={s <= Math.round(agentRating) ? "#F59E0B" : "#E0E0E0"} 
+                                    />
+                                ))}
+                            </View>
+                            <Text className="text-gray-400 text-xs mt-2">{agentReviewCount} đánh giá</Text>
+                        </View>
+                        
+                        <View className="flex-1 justify-center">
+                            {[5, 4, 3, 2, 1].map((star) => (
+                                <RatingBar 
+                                    key={star} 
+                                    star={star} 
+                                    count={ratingStats[star as 1|2|3|4|5]} 
+                                    total={reviews?.length || 0} 
+                                />
+                            ))}
+                        </View>
+                    </View>
 
                     {loadingReviews ? (
                         <ActivityIndicator size="small" color="#0061FF" />
@@ -232,27 +289,27 @@ const BrokerDetails = () => {
                         <View className="gap-4">
                             {reviews.map((review) => (
                                 <View key={review.$id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                                    <View className="flex-row items-center justify-between mb-2">
-                                        <Text className="font-rubik-bold text-black-300 text-base">
-                                            {/* Assuming reviewerId can be expanded to get name, otherwise mask it */}
-                                            Khách hàng
-                                        </Text>
-                                        <View className="flex-row">
-                                            {[1, 2, 3, 4, 5].map((s) => (
-                                                <Image 
-                                                    key={s} 
-                                                    source={icons.star} 
-                                                    className="w-3 h-3" 
-                                                    tintColor={s <= review.rating ? "#F59E0B" : "#E0E0E0"} 
-                                                />
-                                            ))}
+                                    <View className="flex-row items-center justify-between mb-3">
+                                        <View className="flex-row items-center gap-2">
+                                            <View className="w-8 h-8 bg-primary-100 rounded-full items-center justify-center">
+                                                <Image source={icons.person} className="w-4 h-4" tintColor="#0061FF"/>
+                                            </View>
+                                            <View>
+                                                <Text className="font-rubik-bold text-black-300 text-sm">
+                                                    Khách hàng ẩn danh
+                                                </Text>
+                                                <Text className="text-gray-400 text-[10px] font-rubik">
+                                                    {new Date(review.createdAt).toLocaleDateString('vi-VN')}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <View className="flex-row bg-yellow-50 px-2 py-1 rounded-md">
+                                            <Text className="text-yellow-700 font-rubik-bold text-xs mr-1">{review.rating}</Text>
+                                            <Image source={icons.star} className="w-3 h-3" tintColor="#F59E0B" />
                                         </View>
                                     </View>
-                                    <Text className="text-gray-600 font-rubik text-sm leading-5">
-                                        "{review.comment}"
-                                    </Text>
-                                    <Text className="text-gray-400 font-rubik text-xs mt-2 text-right">
-                                        {new Date(review.createdAt).toLocaleDateString('vi-VN')}
+                                    <Text className="text-gray-600 font-rubik text-sm leading-5 pl-2 border-l-2 border-gray-100">
+                                        {review.comment}
                                     </Text>
                                 </View>
                             ))}

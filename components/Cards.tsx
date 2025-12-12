@@ -3,7 +3,7 @@ import React from 'react'
 import images from '@/constants/images';
 import icons from '@/constants/icons';
 import { Models } from 'react-native-appwrite';
-import { formatStatus, getStatusColor } from '@/lib/utils';
+import { formatStatus, getStatusColor, formatCurrency } from '@/lib/utils';
 
 interface Props {
     item: Models.Document;
@@ -27,7 +27,7 @@ export const FeaturedCard = ({item: {image, rating, name, address, price}, onPre
 
                 <View className={"flex flex-row items-center justify-between w-full"}>
                     <Text className={"text-xl font-rubik-extrabold text-white"}>
-                        {price.toLocaleString('vi-VN')} VND
+                        {formatCurrency(price)} VND
                     </Text>
                     <Image source={icons.heart} className={"size-5"} />
                 </View>
@@ -68,7 +68,7 @@ export const Card = ({ item, onPress }: Props) => {
 
                 <View className={"flex flex-row items-center justify-between mt-2"}>
                     <Text className={"text-base font-rubik-bold text-primary-300"}>
-                        {price.toLocaleString('vi-VN')} VND
+                        {formatCurrency(price)} VND
                     </Text>
                     <Image source={icons.heart} className={"w-5 h-5 mr-2 size-5"} tintColor={"#191d31"} />
                 </View>

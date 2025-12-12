@@ -120,11 +120,28 @@ export async function getPropertyById({ id }: { id: string }) {
         // 1. Xử lý thông tin Môi giới (Broker)
         if (property.brokerId) {
             const brokerData = typeof property.brokerId === 'object' ? property.brokerId : null;
+            
+            // Lấy thông tin chi tiết broker để có phoneNumber (tránh lỗi Query.select)
+            let brokerPhoneNumber = null;
+            if (brokerData?.$id) {
+                try {
+                    const fullBrokerProfile = await databases.getDocument(
+                        config.databaseId!,
+                        config.profilesCollectionId!,
+                        brokerData.$id
+                    );
+                    brokerPhoneNumber = fullBrokerProfile.phoneNumber;
+                } catch (err) {
+                    console.warn("Không thể lấy thông tin chi tiết broker:", err);
+                }
+            }
+
             property.agent = {
                 $id: brokerData?.$id || property.brokerId,
                 name: brokerData?.name || 'Môi giới',
                 email: brokerData?.email || 'N/A',
                 avatar: brokerData?.avatar || null,
+                phoneNumber: brokerPhoneNumber,
             };
         } else {
             property.agent = null;
@@ -138,7 +155,6 @@ export async function getPropertyById({ id }: { id: string }) {
                 name: sellerData?.name || 'Chủ nhà',
                 email: sellerData?.email || 'N/A',
                 avatar: sellerData?.avatar || null,
-                // phone: sellerData?.phone || 'N/A' // Bỏ phone vì chưa có trong schema
             };
         } else {
             // Fallback nếu không có relationship seller (dữ liệu cũ)

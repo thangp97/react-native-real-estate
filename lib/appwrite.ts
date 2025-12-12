@@ -31,7 +31,7 @@ export const avatar = new Avatars(client);
 export const databases = new Databases(client);
 export const storage = new Storage(client);
 
-export async function createUser(email: string, password: string, username: string, role: string, region?: string) {
+export async function createUser(email: string, password: string, username: string, role: string, region?: string, phoneNumber?: string) {
     let newAccount;
     try {
         newAccount = await account.create(ID.unique(), email, password, username);
@@ -72,8 +72,16 @@ export async function createUser(email: string, password: string, username: stri
             role: role,
             name: username,
             email: email,
-            credits: 10 // **GÁN CREDITS MẶC ĐỊNH**
+            credits: 10, // **GÁN CREDITS MẶC ĐỊNH**
         };
+
+        if (phoneNumber) {
+            if (role === 'broker' || role === 'seller') {
+                profileData.phoneNumber = phoneNumber;
+            } else {
+                console.warn(`[createUser] PhoneNumber không được lưu cho role ${role}.`);
+            }
+        }
 
         if (region) {
             // Kiểm tra xem region có hợp lệ không
@@ -147,7 +155,8 @@ export async function getCurrentUser() {
             avatar: userProfile.avatar || null, // Chỉ lấy từ profiles
             credits: userProfile.credits,
             favorites: userProfile.favorites || [], // Lấy danh sách yêu thích
-            region: userProfile.region // Lấy thông tin vùng hoạt động của môi giới
+            region: userProfile.region, // Lấy thông tin vùng hoạt động của môi giới
+            phoneNumber: userProfile.phoneNumber || null,
         };
 
     } catch (error: any) {
@@ -183,7 +192,7 @@ export async function signOut() {
 export async function updateUserProfile(userId: string, data: object) {
     try {
         // Danh sách các trường được phép cập nhật (không bao gồm relationship fields)
-        const allowedFields = ['name', 'avatar', 'email', 'role', 'credits', 'rating', 'reviewCount', 'region', 'favorites'];
+        const allowedFields = ['name', 'avatar', 'email', 'role', 'credits', 'rating', 'reviewCount', 'region', 'favorites', 'phoneNumber'];
         
         // Danh sách các trường relationship cần loại bỏ hoàn toàn
         const relationshipFields = ['bookings', 'properties'];

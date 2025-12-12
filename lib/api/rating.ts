@@ -25,8 +25,7 @@ export async function createReview({
                 agentId,
                 propertyId,
                 rating,
-                comment,
-                createdAt: new Date().toISOString()
+                comment
             }
         );
 
@@ -98,7 +97,7 @@ export async function getReviewsByAgentId(agentId: string) {
         const result = await databases.listDocuments(
             config.databaseId!,
             config.reviewsCollectionId!,
-            [Query.equal('agentId', agentId), Query.orderDesc('createdAt')]
+            [Query.equal('agentId', agentId), Query.orderDesc('$createdAt')]
         );
         return result.documents;
     } catch (error) {

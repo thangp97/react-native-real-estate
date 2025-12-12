@@ -63,12 +63,14 @@ const SignUp = () => {
         name: string;
         email: string;
         password: string;
+        phoneNumber: string;
         role: string;
         region?: RegionKey;
     }>({
         name: '',
         email: '',
         password: '',
+        phoneNumber: '',
         role: 'buyer',
         region: undefined
     });
@@ -81,7 +83,7 @@ const SignUp = () => {
     }
 
     const handleSignUp = async () => {
-        if (!form.name || !form.email || !form.password) {
+        if (!form.name || !form.email || !form.password || !form.phoneNumber) {
             Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
             return;
         }
@@ -93,7 +95,7 @@ const SignUp = () => {
 
         setIsSubmitting(true);
         try {
-            await createUser(form.email, form.password, form.name, form.role, form.region);
+            await createUser(form.email, form.password, form.name, form.role, form.region, form.phoneNumber);
 
             // Sau khi đăng ký thành công (đã tự động đăng nhập), refetch lại dữ liệu người dùng
             await refetch({});
@@ -136,6 +138,17 @@ const SignUp = () => {
                 <View>
                     <Text className="text-base text-gray-600 font-rubik-medium">Email</Text>
                     <TextInput placeholder="Email" value={form.email} onChangeText={(e) => setForm({...form, email: e})} style={styles.input} keyboardType="email-address" autoCapitalize="none" />
+                </View>
+
+                <View>
+                    <Text className="text-base text-gray-600 font-rubik-medium">Số điện thoại</Text>
+                    <TextInput 
+                        placeholder="Số điện thoại" 
+                        value={form.phoneNumber} 
+                        onChangeText={(e) => setForm({...form, phoneNumber: e})} 
+                        style={styles.input} 
+                        keyboardType="phone-pad" 
+                    />
                 </View>
                 
                 <View>

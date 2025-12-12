@@ -3,11 +3,23 @@ import "./global.css";
 import { useFonts } from "expo-font";
 import { useEffect } from "react";
 import GlobalProvider from "@/lib/global-provider";
-import { ComparisonProvider } from "@/lib/comparison-provider"; // Đảm bảo đường dẫn đúng
-import { FilterProvider } from "@/lib/filter-provider"; // Đảm bảo đường dẫn đúng
+import { ComparisonProvider } from "@/lib/comparison-provider";
+import { FilterProvider } from "@/lib/filter-provider";
+import { Text, TextInput } from "react-native";
 
 // Giữ Splash Screen hiển thị cho đến khi load xong font
 SplashScreen.preventAutoHideAsync();
+
+// Fix font padding on Android to align text vertically
+if (Text.defaultProps == null) Text.defaultProps = {};
+Text.defaultProps.allowFontScaling = false;
+// @ts-ignore
+Text.defaultProps.style = { includeFontPadding: false, textAlignVertical: 'center' };
+
+if (TextInput.defaultProps == null) TextInput.defaultProps = {};
+TextInput.defaultProps.allowFontScaling = false;
+// @ts-ignore
+TextInput.defaultProps.style = { includeFontPadding: false, textAlignVertical: 'center' };
 
 export default function RootLayout() {
     const [fontsLoaded] = useFonts({

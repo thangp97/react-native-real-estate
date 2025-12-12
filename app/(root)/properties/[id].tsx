@@ -29,6 +29,7 @@ import icons from "@/constants/icons";
 import images from "@/constants/images";
 
 import MortgageCalculator from "@/components/MortgageCalculator";
+import PriceHistory from "@/components/PriceHistory";
 import { createBooking, getPropertyById, getSimilarProperties, togglePropertyFavorite } from "@/lib/api/buyer";
 import { useComparisonContext } from "@/lib/comparison-provider";
 import { useGlobalContext } from "@/lib/global-provider";
@@ -37,7 +38,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getUserByEmail, markPropertyAsSold, updatePropertyPrice } from "@/lib/api/broker";
 import { checkReviewExists, createReview } from "@/lib/api/rating";
-import { formatStatus, getStatusColor } from "@/lib/utils";
+import { formatStatus, getStatusColor, formatCurrency } from "@/lib/utils";
 
 type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'approved' | 'available';
 
@@ -150,7 +151,10 @@ const Property = () => {
         }
     };
 
-    const isAgent = user && property?.agent && user.$id === property.agent.$id;
+    const isAgent = user && (
+        (property?.agent && property.agent.$id === user.$id) || 
+        (property?.brokerId && (typeof property.brokerId === 'string' ? property.brokerId === user.$id : property.brokerId.$id === user.$id))
+    );
 
     useEffect(() => {
         if (property?.status === 'sold' && user?.$id) {
@@ -161,9 +165,14 @@ const Property = () => {
     const handleSubmitReview = async () => {
         if (!user || !property) return;
         
-        let targetAgentId = DEFAULT_BROKER_ID;
+        let targetAgentId = null;
         if (property?.agent?.$id) targetAgentId = property.agent.$id;
         else if (property?.brokerId) targetAgentId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
+
+        if (!targetAgentId || targetAgentId === 'unknown') {
+             Alert.alert("Lỗi", "Không xác định được môi giới của tin đăng này để đánh giá.");
+             return;
+        }
 
         setSubmittingReview(true);
         try {
@@ -177,7 +186,8 @@ const Property = () => {
             Alert.alert("Cảm ơn", "Đánh giá của bạn đã được gửi!");
             setHasReviewed(true);
             setReviewModalVisible(false);
-        } catch (error) {
+        } catch (error: any) {
+            console.error(error);
             Alert.alert("Lỗi", "Không thể gửi đánh giá. Vui lòng thử lại.");
         } finally {
             setSubmittingReview(false);
@@ -309,7 +319,7 @@ const Property = () => {
 
     const currentBroker = property?.agent ? {
         name: property.agent.name,
-        phone: property.agent.phone || PLATFORM_DEFAULT_BROKER.phone,
+        phone: property.agent.phoneNumber || PLATFORM_DEFAULT_BROKER.phone,
         email: property.agent.email,
         avatar: { uri: property.agent.avatar }
     } : PLATFORM_DEFAULT_BROKER;
@@ -697,6 +707,8 @@ const Property = () => {
                             </View>
                         </TouchableOpacity>
                     </View>
+
+                    {property?.$id && <PriceHistory propertyId={property.$id} />}
                     
                     {property?.price && <MortgageCalculator propertyPrice={property.price} />}
 
@@ -729,7 +741,6 @@ const Property = () => {
 
                 
 
-                            {/* Review Modal */}
             <Modal
                 animationType="slide"
                 transparent={true}
@@ -904,7 +915,7 @@ const Property = () => {
                             numberOfLines={1}
                             className="text-primary-300 text-start text-xl font-rubik-bold"
                         >
-                            {property?.price ? `${property.price.toLocaleString('vi-VN')} VND` : ''}
+                            {property?.price ? `${formatCurrency(property.price)} VNĐ` : ''}
                         </Text>
                     </View>
                     {property?.status === 'sold' ? (
@@ -1107,7 +1118,7 @@ const Property = () => {
                                     
                                     <View className="gap-8">
                                         <Text className="font-rubik-bold text-primary-300 text-center">
-                                            {item.price.toLocaleString()}
+                                            {formatCurrency(item.price)}
                                         </Text>
                                         <Text className="font-rubik-medium text-center">{item.area} m²</Text>
                                         <Text className="font-rubik-medium text-center">{item.bedrooms}</Text>
