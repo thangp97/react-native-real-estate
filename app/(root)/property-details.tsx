@@ -124,11 +124,38 @@ const PropertyDetails = () => {
         const fetchAgent = async () => {
             if (property && property.brokerId) {
                 setLoadingAgent(true);
-                const agentData = await getAgentById({ agentId: property.brokerId });
-                setAgent(agentData);
-                setLoadingAgent(false);
+                try {
+                    // Xử lý brokerId có thể là object hoặc string
+                    let agentId: string | null = null;
+                    
+                    if (typeof property.brokerId === 'object' && property.brokerId !== null) {
+                        // Nếu là object, lấy $id
+                        agentId = property.brokerId.$id || null;
+                    } else if (typeof property.brokerId === 'string') {
+                        // Nếu là string, validate trước khi sử dụng
+                        agentId = property.brokerId.trim();
+                        // Kiểm tra độ dài và format hợp lệ (tối đa 36 ký tự, chỉ chứa a-z, A-Z, 0-9, _)
+                        if (agentId.length > 36 || !/^[a-zA-Z0-9_]+$/.test(agentId) || agentId.startsWith('_')) {
+                            console.warn("ID môi giới không hợp lệ:", agentId);
+                            agentId = null;
+                        }
+                    }
+                    
+                    if (agentId) {
+                        const agentData = await getAgentById({ agentId });
+                        setAgent(agentData);
+                    } else {
+                        setAgent(null);
+                    }
+                } catch (error) {
+                    console.error("Lỗi khi lấy thông tin agent:", error);
+                    setAgent(null);
+                } finally {
+                    setLoadingAgent(false);
+                }
             } else {
                 setLoadingAgent(false);
+                setAgent(null);
             }
         };
         fetchAgent();

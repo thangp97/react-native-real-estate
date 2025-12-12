@@ -113,6 +113,18 @@ export async function topUpCredit({ userId, amount }: { userId: string, amount: 
             { credits: newCredits }
         );
 
+        // Tạo thông báo cho seller
+        try {
+            const { createNotification } = await import('./notifications');
+            await createNotification({
+                userId,
+                message: `Bạn đã nạp thành công ${amount.toLocaleString('vi-VN')} credits. Số dư hiện tại: ${newCredits.toLocaleString('vi-VN')} credits`,
+                type: 'credits_topup'
+            });
+        } catch (notifError) {
+            console.warn("Không thể tạo thông báo:", notifError);
+        }
+
         return newCredits;
     } catch (error: any) {
         console.error("Lỗi khi nạp credit:", error);
@@ -261,11 +273,14 @@ export async function acceptProposedPrice({ propertyId, proposedPrice, userId }:
 
 export async function getSellerBookings(sellerId: string) {
     try {
-        // Seller đóng vai trò là "agent" (người nhận lịch) trong schema bookings
+        // Khi môi giới đặt lịch với người bán:
+        // - Môi giới là agent
+        // - Người bán là user
+        // Vì vậy cần query theo 'user' để tìm booking của seller
         const result = await databases.listDocuments(
             config.databaseId!,
             config.bookingsCollectionId!,
-            [Query.equal('agent', sellerId), Query.orderDesc('date')]
+            [Query.equal('user', sellerId), Query.orderDesc('date')]
         );
 
         const enrichedBookings = await Promise.all(result.documents.map(async (booking: any) => {
@@ -288,14 +303,14 @@ export async function getSellerBookings(sellerId: string) {
                 }
                 
                 // Lấy thông tin người đặt (Môi giới)
-                // Trong trường hợp này booking.user chính là Môi giới
-                 if (booking.user && typeof booking.user === 'string') {
-                    const userProfile = await databases.getDocument(
+                // Trong trường hợp này booking.agent chính là Môi giới
+                 if (booking.agent && typeof booking.agent === 'string') {
+                    const agentProfile = await databases.getDocument(
                         config.databaseId!,
                         config.profilesCollectionId!,
-                        booking.user
+                        booking.agent
                     );
-                    booking.user = userProfile;
+                    booking.agent = agentProfile;
                 }
 
             } catch (err) {
@@ -313,12 +328,53 @@ export async function getSellerBookings(sellerId: string) {
 
 export async function confirmBooking(bookingId: string) {
     try {
-        return await databases.updateDocument(
+        // Lấy thông tin booking trước khi cập nhật
+        const booking = await databases.getDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            bookingId
+        );
+
+        const updatedBooking = await databases.updateDocument(
             config.databaseId!,
             config.bookingsCollectionId!,
             bookingId,
             { status: 'confirmed' }
         );
+
+        // Tạo thông báo cho agent (broker)
+        try {
+            const { createNotification } = await import('./notifications');
+            const agentId = typeof booking.agent === 'string' ? booking.agent : booking.agent?.$id;
+            const propertyId = typeof booking.property === 'string' ? booking.property : booking.property?.$id;
+            
+            if (agentId && propertyId) {
+                const property = await databases.getDocument(
+                    config.databaseId!,
+                    config.propertiesCollectionId!,
+                    propertyId
+                );
+                const propertyName = property.name || 'Bất động sản';
+                const formattedDate = new Date(booking.date).toLocaleString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                await createNotification({
+                    userId: agentId,
+                    message: `Lịch hẹn xem "${propertyName}" vào ${formattedDate} đã được chủ nhà chấp nhận`,
+                    type: 'booking_confirmed',
+                    relatedPropertyId: propertyId
+                });
+            }
+        } catch (notifError) {
+            console.warn("Không thể tạo thông báo:", notifError);
+        }
+
+        return updatedBooking;
     } catch (error) {
         console.error("Lỗi xác nhận lịch hẹn:", error);
         throw error;
@@ -327,12 +383,53 @@ export async function confirmBooking(bookingId: string) {
 
 export async function rejectBooking(bookingId: string) {
     try {
-        return await databases.updateDocument(
+        // Lấy thông tin booking trước khi cập nhật
+        const booking = await databases.getDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            bookingId
+        );
+
+        const updatedBooking = await databases.updateDocument(
             config.databaseId!,
             config.bookingsCollectionId!,
             bookingId,
             { status: 'cancelled' }
         );
+
+        // Tạo thông báo cho agent (broker)
+        try {
+            const { createNotification } = await import('./notifications');
+            const agentId = typeof booking.agent === 'string' ? booking.agent : booking.agent?.$id;
+            const propertyId = typeof booking.property === 'string' ? booking.property : booking.property?.$id;
+            
+            if (agentId && propertyId) {
+                const property = await databases.getDocument(
+                    config.databaseId!,
+                    config.propertiesCollectionId!,
+                    propertyId
+                );
+                const propertyName = property.name || 'Bất động sản';
+                const formattedDate = new Date(booking.date).toLocaleString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                await createNotification({
+                    userId: agentId,
+                    message: `Lịch hẹn xem "${propertyName}" vào ${formattedDate} đã bị chủ nhà từ chối`,
+                    type: 'booking_rejected',
+                    relatedPropertyId: propertyId
+                });
+            }
+        } catch (notifError) {
+            console.warn("Không thể tạo thông báo:", notifError);
+        }
+
+        return updatedBooking;
     } catch (error) {
         console.error("Lỗi từ chối lịch hẹn:", error);
         throw error;

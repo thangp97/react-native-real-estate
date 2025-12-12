@@ -1,5 +1,5 @@
-import { databases, config, storage } from "../appwrite";
-import { Query, ID } from "react-native-appwrite";
+import { ID, Query } from "react-native-appwrite";
+import { config, databases, storage } from "../appwrite";
 
 export async function getPropertiesByBrokerId(agentId: string) {
     try {
@@ -25,8 +25,16 @@ export async function getPropertiesByBrokerId(agentId: string) {
 
 export async function getAgentById({ agentId }: { agentId: string }) {
     if (!agentId) return null;
+    
+    // Validate agentId format
+    const trimmedId = typeof agentId === 'string' ? agentId.trim() : '';
+    if (!trimmedId || trimmedId.length > 36 || !/^[a-zA-Z0-9_]+$/.test(trimmedId) || trimmedId.startsWith('_')) {
+        console.warn("ID môi giới không hợp lệ:", agentId);
+        return null;
+    }
+    
     try {
-        return await databases.getDocument(config.databaseId!, config.profilesCollectionId!, agentId);
+        return await databases.getDocument(config.databaseId!, config.profilesCollectionId!, trimmedId);
     } catch (error) {
         console.error("Lỗi khi lấy thông tin agent:", error);
         return null;
@@ -110,6 +118,13 @@ export async function getBrokerRecentProperties(userId: string, region: string) 
 
 export async function assignPropertyToBroker(propertyId: string, brokerId: string) {
     try {
+        // Lấy thông tin property trước khi cập nhật
+        const property = await databases.getDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId
+        );
+
         // 1. Dữ liệu cần cập nhật: brokerId (Relationship) và trạng thái
         const payload = {
             brokerId: brokerId,    // Gán Broker ID vào cột Relationship
@@ -130,13 +145,41 @@ export async function assignPropertyToBroker(propertyId: string, brokerId: strin
         console.log(`[AssignBroker] Cập nhật Property: ${propertyId}. Payload:`, payload);
         console.log(`[AssignBroker] Permissions mới:`, permissions);
 
-        return await databases.updateDocument(
+        const updatedProperty = await databases.updateDocument(
             config.databaseId!,
             config.propertiesCollectionId!,
             propertyId,
             payload,
             permissions // Truyền Permissions vào hàm update
         );
+
+        // Tạo thông báo cho seller
+        try {
+            const { createNotification } = await import('./notifications');
+            const sellerId = typeof property.seller === 'string' ? property.seller : property.seller?.$id;
+            const propertyName = property.name || 'Bất động sản';
+            
+            if (sellerId) {
+                // Lấy tên broker
+                const brokerProfile = await databases.getDocument(
+                    config.databaseId!,
+                    config.profilesCollectionId!,
+                    brokerId
+                );
+                const brokerName = brokerProfile?.name || 'Môi giới';
+                
+                await createNotification({
+                    userId: sellerId,
+                    message: `Môi giới ${brokerName} đã tiếp nhận bài đăng "${propertyName}" của bạn`,
+                    type: 'broker_assigned',
+                    relatedPropertyId: propertyId
+                });
+            }
+        } catch (notifError) {
+            console.warn("Không thể tạo thông báo:", notifError);
+        }
+
+        return updatedProperty;
 
     } catch (error: any) {
         // Bắt lỗi chi tiết (Quan trọng để xác định lỗi 403/Permission)
@@ -158,6 +201,13 @@ export async function finalizeVerification(
     proposedPrice?: number
 ) {
     try {
+        // Lấy thông tin property trước khi cập nhật
+        const property = await databases.getDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId
+        );
+
         const updateData: any = {
             status: decision,
             verificationDate: new Date().toISOString(), // Thêm ngày xác thực
@@ -166,12 +216,45 @@ export async function finalizeVerification(
         if (note) updateData.rejectionReason = note;
         if (proposedPrice) updateData.proposedPrice = proposedPrice;
 
-         return await databases.updateDocument(
+        const updatedProperty = await databases.updateDocument(
             config.databaseId!,
             config.propertiesCollectionId!,
             propertyId,
             updateData // Truyền payload động
         );
+
+        // Tạo thông báo cho seller
+        try {
+            const { createNotification } = await import('./notifications');
+            const sellerId = typeof property.seller === 'string' ? property.seller : property.seller?.$id;
+            const propertyName = property.name || 'Bất động sản';
+            
+            if (sellerId) {
+                let statusMessage = '';
+                switch (decision) {
+                    case 'approved':
+                        statusMessage = `Bài đăng "${propertyName}" của bạn đã được duyệt`;
+                        break;
+                    case 'rejected':
+                        statusMessage = `Bài đăng "${propertyName}" của bạn đã bị từ chối`;
+                        break;
+                    case 'request_changes':
+                        statusMessage = `Bài đăng "${propertyName}" của bạn cần chỉnh sửa`;
+                        break;
+                }
+                
+                await createNotification({
+                    userId: sellerId,
+                    message: statusMessage,
+                    type: 'property_status_updated',
+                    relatedPropertyId: propertyId
+                });
+            }
+        } catch (notifError) {
+            console.warn("Không thể tạo thông báo:", notifError);
+        }
+
+        return updatedProperty;
     } catch (error) {
         console.error("Lỗi xác thực BĐS:", error);
         throw error;
@@ -310,7 +393,21 @@ export async function getBrokerBookings(brokerId: string) {
                         booking.property = fullProperty;
                     }
                 }
-            } catch (err) {
+                
+                // 4. Enrich thông tin user (có thể là buyer hoặc seller)
+                if (booking.user && typeof booking.user === 'string') {
+                    try {
+                        const userProfile = await databases.getDocument(
+                            config.databaseId!,
+                            config.profilesCollectionId!,
+                            booking.user
+                        );
+                        booking.user = userProfile;
+                    } catch {
+                        console.warn(`[BrokerBookings] Không thể lấy thông tin user cho booking ${booking.$id}`);
+                    }
+                }
+            } catch {
                 console.warn(`[BrokerBookings] Không thể lấy chi tiết BĐS cho booking ${booking.$id}`);
             }
             return booking;
@@ -325,12 +422,53 @@ export async function getBrokerBookings(brokerId: string) {
 
 export async function confirmBooking(bookingId: string) {
     try {
-        return await databases.updateDocument(
+        // Lấy thông tin booking trước khi cập nhật
+        const booking = await databases.getDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            bookingId
+        );
+
+        const updatedBooking = await databases.updateDocument(
             config.databaseId!,
             config.bookingsCollectionId!,
             bookingId,
             { status: 'confirmed' }
         );
+
+        // Tạo thông báo cho user (buyer hoặc seller)
+        try {
+            const { createNotification } = await import('./notifications');
+            const userId = typeof booking.user === 'string' ? booking.user : booking.user?.$id;
+            const propertyId = typeof booking.property === 'string' ? booking.property : booking.property?.$id;
+            
+            if (userId && propertyId) {
+                const property = await databases.getDocument(
+                    config.databaseId!,
+                    config.propertiesCollectionId!,
+                    propertyId
+                );
+                const propertyName = property.name || 'Bất động sản';
+                const formattedDate = new Date(booking.date).toLocaleString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                await createNotification({
+                    userId,
+                    message: `Lịch hẹn xem "${propertyName}" vào ${formattedDate} đã được chấp nhận`,
+                    type: 'booking_confirmed',
+                    relatedPropertyId: propertyId
+                });
+            }
+        } catch (notifError) {
+            console.warn("Không thể tạo thông báo:", notifError);
+        }
+
+        return updatedBooking;
     } catch (error) {
         console.error("Lỗi xác nhận lịch hẹn:", error);
         throw error;
@@ -342,12 +480,53 @@ export async function confirmBooking(bookingId: string) {
  */
 export async function rejectBooking(bookingId: string) {
     try {
-        return await databases.updateDocument(
+        // Lấy thông tin booking trước khi cập nhật
+        const booking = await databases.getDocument(
+            config.databaseId!,
+            config.bookingsCollectionId!,
+            bookingId
+        );
+
+        const updatedBooking = await databases.updateDocument(
             config.databaseId!,
             config.bookingsCollectionId!,
             bookingId,
             { status: 'cancelled' }
         );
+
+        // Tạo thông báo cho user (buyer hoặc seller)
+        try {
+            const { createNotification } = await import('./notifications');
+            const userId = typeof booking.user === 'string' ? booking.user : booking.user?.$id;
+            const propertyId = typeof booking.property === 'string' ? booking.property : booking.property?.$id;
+            
+            if (userId && propertyId) {
+                const property = await databases.getDocument(
+                    config.databaseId!,
+                    config.propertiesCollectionId!,
+                    propertyId
+                );
+                const propertyName = property.name || 'Bất động sản';
+                const formattedDate = new Date(booking.date).toLocaleString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                await createNotification({
+                    userId,
+                    message: `Lịch hẹn xem "${propertyName}" vào ${formattedDate} đã bị từ chối`,
+                    type: 'booking_rejected',
+                    relatedPropertyId: propertyId
+                });
+            }
+        } catch (notifError) {
+            console.warn("Không thể tạo thông báo:", notifError);
+        }
+
+        return updatedBooking;
     } catch (error) {
         console.error("Lỗi từ chối lịch hẹn:", error);
         throw error;
@@ -463,7 +642,7 @@ async function getUserProfile(profileId: string) {
             profileId
         );
         return profile;
-    } catch (e) {
+    } catch {
         console.error("Không tìm thấy profile:", profileId);
         return { name: "Người dùng ẩn danh", avatar: null }; // Fallback
     }

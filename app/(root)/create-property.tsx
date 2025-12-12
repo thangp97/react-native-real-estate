@@ -216,7 +216,6 @@ const CreateProperty = () => {
                 area: parseFloat(form.area),
                 bedrooms: parseInt(form.bedrooms),
                 bathrooms: parseInt(form.bathrooms),
-                rating: 0,
                 status: 'available', // Bài đăng mới luôn có status là 'available' để môi giới có thể nhận
                 expiresAt: expiresAt.toISOString(),
             };
@@ -242,6 +241,39 @@ const CreateProperty = () => {
                     if (url) databases.createDocument(config.databaseId!, config.galleriesCollectionId!, ID.unique(), { propertyId: newProperty.$id, image: url, uploaderId: user!.$id });
                 }));
                 await Promise.all(galleryPromises);
+
+                // Tạo thông báo cho tất cả broker trong cùng khu vực
+                try {
+                    const { createNotification } = await import('@/lib/api/notifications');
+                    const { Query } = await import('react-native-appwrite');
+                    
+                    // Lấy tất cả broker
+                    const brokersResult = await databases.listDocuments(
+                        config.databaseId!,
+                        config.profilesCollectionId!,
+                        [
+                            Query.equal('role', 'broker'),
+                            Query.limit(100) // Giới hạn để tránh quá tải
+                        ]
+                    );
+
+                    // Gửi thông báo cho từng broker
+                    const notificationPromises = brokersResult.documents.map(broker =>
+                        createNotification({
+                            userId: broker.$id,
+                            message: `Có bài đăng mới "${form.name}" tại ${REGIONS[form.region]} đang chờ môi giới tiếp nhận`,
+                            type: 'property_available',
+                            relatedPropertyId: newProperty.$id
+                        }).catch(err => {
+                            console.warn(`Không thể gửi thông báo cho broker ${broker.$id}:`, err);
+                        })
+                    );
+
+                    await Promise.all(notificationPromises);
+                } catch (notifError) {
+                    console.warn("Không thể tạo thông báo cho broker:", notifError);
+                    // Không throw error để không ảnh hưởng đến việc tạo property
+                }
             }
             router.push('/my-properties');
         } catch (error: any) {

@@ -171,7 +171,11 @@ const BookingsScreen = () => {
                             otherPerson = item.user; // Broker shows Buyer
                             otherPersonLabel = "Khách hàng";
                         } else if (isSeller) {
-                            otherPerson = item.user; // Seller shows Broker (who booked)
+                            // Khi môi giới đặt lịch với người bán:
+                            // - Môi giới là agent
+                            // - Người bán là user
+                            // Vì vậy seller cần hiển thị agent (môi giới)
+                            otherPerson = item.agent; // Seller shows Broker (who booked)
                             otherPersonLabel = "Môi giới đặt";
                         } else {
                             // Buyer view

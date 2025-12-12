@@ -1,22 +1,23 @@
-import React, { useState } from 'react';
-import {
-    View,
-    Text,
-    TextInput,
-    Button,
-    Alert,
-    StyleSheet,
-    TouchableOpacity,
-    ActivityIndicator,
-    ImageBackground,
-    Modal,
-    FlatList,
-    ScrollView
-} from 'react-native';
-import { useRouter, Link, Redirect } from 'expo-router';
 import { createUser } from '@/lib/appwrite';
 import { useGlobalContext } from '@/lib/global-provider';
+import { Link, Redirect, useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Button,
+    FlatList,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
 
+// REGIONS phải khớp với enum trong database
+// Enum trong database: AnGiang, BaRiaVungTau, BacLieu, BenTre, BinhDinh, BinhDuong, BinhPhuoc, BinhThuan, CanTho, DaNang, DakLak, DienBien, DongNai, DongThap, HaGiang, HaNoi, HaTinh, HaiDuong, HaiPhong, HoaBinh, KhanhHoa, KienGiang, LamDong, LangSon, LongAn, NgheAn, PhuTho, QuangNam, QuangNinh, SocTrang, TayNinh, ThanhHoa, ThuaThienHue, TPHCM
 const REGIONS = {
     AnGiang: "An Giang",
     BaRiaVungTau: "Bà Rịa - Vũng Tàu",
@@ -95,7 +96,7 @@ const SignUp = () => {
             await createUser(form.email, form.password, form.name, form.role, form.region);
 
             // Sau khi đăng ký thành công (đã tự động đăng nhập), refetch lại dữ liệu người dùng
-            await refetch();
+            await refetch({});
 
             Alert.alert('Thành công', 'Đăng ký thành công!', [
                 { text: 'OK', onPress: () => router.replace('/') },
