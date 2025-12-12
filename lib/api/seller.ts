@@ -261,11 +261,14 @@ export async function acceptProposedPrice({ propertyId, proposedPrice, userId }:
 
 export async function getSellerBookings(sellerId: string) {
     try {
-        // Seller đóng vai trò là "agent" (người nhận lịch) trong schema bookings
+        // Khi môi giới đặt lịch với người bán:
+        // - Môi giới là agent
+        // - Người bán là user
+        // Vì vậy cần query theo 'user' để tìm booking của seller
         const result = await databases.listDocuments(
             config.databaseId!,
             config.bookingsCollectionId!,
-            [Query.equal('agent', sellerId), Query.orderDesc('date')]
+            [Query.equal('user', sellerId), Query.orderDesc('date')]
         );
 
         const enrichedBookings = await Promise.all(result.documents.map(async (booking: any) => {
@@ -288,14 +291,14 @@ export async function getSellerBookings(sellerId: string) {
                 }
                 
                 // Lấy thông tin người đặt (Môi giới)
-                // Trong trường hợp này booking.user chính là Môi giới
-                 if (booking.user && typeof booking.user === 'string') {
-                    const userProfile = await databases.getDocument(
+                // Trong trường hợp này booking.agent chính là Môi giới
+                 if (booking.agent && typeof booking.agent === 'string') {
+                    const agentProfile = await databases.getDocument(
                         config.databaseId!,
                         config.profilesCollectionId!,
-                        booking.user
+                        booking.agent
                     );
-                    booking.user = userProfile;
+                    booking.agent = agentProfile;
                 }
 
             } catch (err) {

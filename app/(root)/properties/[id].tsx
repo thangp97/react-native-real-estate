@@ -14,6 +14,8 @@ import {
     ScrollView,
     Share // Added Share
     ,
+
+
     Text,
     TextInput,
     TouchableOpacity,
@@ -21,7 +23,6 @@ import {
     View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getOrCreateChat } from '@/lib/api/chat';
 
 import { Card } from "@/components/Cards";
 import icons from "@/constants/icons";
@@ -389,8 +390,28 @@ const Property = () => {
              const sellerId = property?.sellerInfo?.$id || (typeof property?.seller === 'object' ? property?.seller?.$id : property?.seller);
              
              if (sellerId && sellerId !== 'unknown') {
-                 targetAgentId = sellerId;
-                 successMessage = "Yêu cầu đặt lịch với Chủ nhà đã được gửi. Chủ nhà sẽ nhận được thông báo.";
+                 // Khi môi giới đặt lịch với người bán:
+                 // - Môi giới là agent
+                 // - Người bán là user
+                 setIsBooking(true);
+                 try {
+                     await createBooking({
+                         userId: sellerId, // Người bán là user
+                         agentId: user.$id, // Môi giới là agent
+                         propertyId: id,
+                         date: selectedDate.toISOString(),
+                         note: bookingNote
+                     });
+                     Alert.alert("Thành công", "Yêu cầu đặt lịch với Chủ nhà đã được gửi. Chủ nhà sẽ nhận được thông báo.");
+                     setBookingModalVisible(false);
+                     setBookingNote('');
+                 } catch (error: any) {
+                     console.error("Lỗi đặt lịch:", error);
+                     Alert.alert("Lỗi", "Không thể đặt lịch. Vui lòng thử lại.");
+                 } finally {
+                     setIsBooking(false);
+                 }
+                 return; // Return sớm để không chạy logic phía dưới
              } else {
                  console.warn("Không tìm thấy ID chủ nhà, fallback về Broker mặc định");
              }

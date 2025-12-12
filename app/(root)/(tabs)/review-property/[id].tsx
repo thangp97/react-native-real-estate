@@ -1,18 +1,30 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { addImageToGalleryDoc, finalizeVerification, getPropertyById, getPropertyGallery, uploadFieldImage } from '@/lib/api/broker';
+import { createBooking } from '@/lib/api/buyer'; // Import createBooking
+import { getOrCreateChat } from '@/lib/api/chat';
+import { useGlobalContext } from '@/lib/global-provider';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker'; // Import DateTimePicker
+import * as ImagePicker from 'expo-image-picker';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-    View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Image, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, Button, Keyboard, TouchableWithoutFeedback
+    ActivityIndicator,
+    Alert,
+    Button,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useGlobalContext } from '@/lib/global-provider';
-import { getOrCreateChat } from '@/lib/api/chat';
-import { getPropertyById, finalizeVerification, getPropertyGallery, uploadFieldImage, addImageToGalleryDoc } from '@/lib/api/broker';
-import { createBooking } from '@/lib/api/buyer'; // Import createBooking
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import { upload360Image, saveTourToProperty } from '@/lib/api/tour360';
-import ThreeSixtyViewer from '@/components/ThreeSixtyViewer';
-import DateTimePicker from '@react-native-community/datetimepicker'; // Import DateTimePicker
 
 const CheckboxItem = ({ checked, label, onPress }: { checked: boolean; label: string; onPress: () => void; }) => (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} className="flex-row items-center py-3">
@@ -151,9 +163,12 @@ const ReviewPropertyDetailScreen = () => {
 
         setIsBooking(true);
         try {
+            // Khi môi giới đặt lịch với người bán:
+            // - Môi giới là agent
+            // - Người bán là user
             await createBooking({
-                userId: user.$id,
-                agentId: targetAgentId, // Gửi tới Seller
+                userId: targetAgentId, // Người bán là user
+                agentId: user.$id, // Môi giới là agent
                 propertyId: id,
                 date: selectedDate.toISOString(),
                 note: bookingNote

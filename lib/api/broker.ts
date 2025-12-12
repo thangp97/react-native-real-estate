@@ -1,5 +1,5 @@
-import { databases, config, storage } from "../appwrite";
-import { Query, ID } from "react-native-appwrite";
+import { ID, Query } from "react-native-appwrite";
+import { config, databases, storage } from "../appwrite";
 
 export async function getPropertiesByBrokerId(agentId: string) {
     try {
@@ -25,8 +25,16 @@ export async function getPropertiesByBrokerId(agentId: string) {
 
 export async function getAgentById({ agentId }: { agentId: string }) {
     if (!agentId) return null;
+    
+    // Validate agentId format
+    const trimmedId = typeof agentId === 'string' ? agentId.trim() : '';
+    if (!trimmedId || trimmedId.length > 36 || !/^[a-zA-Z0-9_]+$/.test(trimmedId) || trimmedId.startsWith('_')) {
+        console.warn("ID môi giới không hợp lệ:", agentId);
+        return null;
+    }
+    
     try {
-        return await databases.getDocument(config.databaseId!, config.profilesCollectionId!, agentId);
+        return await databases.getDocument(config.databaseId!, config.profilesCollectionId!, trimmedId);
     } catch (error) {
         console.error("Lỗi khi lấy thông tin agent:", error);
         return null;
@@ -310,7 +318,21 @@ export async function getBrokerBookings(brokerId: string) {
                         booking.property = fullProperty;
                     }
                 }
-            } catch (err) {
+                
+                // 4. Enrich thông tin user (có thể là buyer hoặc seller)
+                if (booking.user && typeof booking.user === 'string') {
+                    try {
+                        const userProfile = await databases.getDocument(
+                            config.databaseId!,
+                            config.profilesCollectionId!,
+                            booking.user
+                        );
+                        booking.user = userProfile;
+                    } catch {
+                        console.warn(`[BrokerBookings] Không thể lấy thông tin user cho booking ${booking.$id}`);
+                    }
+                }
+            } catch {
                 console.warn(`[BrokerBookings] Không thể lấy chi tiết BĐS cho booking ${booking.$id}`);
             }
             return booking;
@@ -463,7 +485,7 @@ async function getUserProfile(profileId: string) {
             profileId
         );
         return profile;
-    } catch (e) {
+    } catch {
         console.error("Không tìm thấy profile:", profileId);
         return { name: "Người dùng ẩn danh", avatar: null }; // Fallback
     }
