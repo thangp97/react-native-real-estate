@@ -1,12 +1,21 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import {
-    View, Text, FlatList, Image, TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar, TextInput, Alert
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { deleteChatById, getMyChats } from '@/lib/api/chat'; // Đã import deleteChatById
+import { config, databases } from '@/lib/appwrite';
 import { useGlobalContext } from '@/lib/global-provider';
-import { getMyChats, deleteChatById } from '@/lib/api/chat'; // Đã import deleteChatById
-import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList, Image,
+    RefreshControl, StatusBar,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { Query } from 'react-native-appwrite';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Hàm helper format thời gian
 const formatTime = (isoString: string) => {
@@ -28,15 +37,48 @@ const ChatListScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchText, setSearchText] = useState('');
+    const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
     // --- STATE MỚI CHO LOGIC XÓA ---
     const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    const fetchUnreadCounts = async (chatIds: string[]) => {
+        if (!user) return;
+        try {
+            const counts: Record<string, number> = {};
+            await Promise.all(
+                chatIds.map(async (chatId) => {
+                    try {
+                        const result = await databases.listDocuments(
+                            config.databaseId!,
+                            config.messagesCollectionId!,
+                            [
+                                Query.equal('chatId', chatId),
+                                Query.equal('receiverId', user.$id),
+                                Query.equal('isRead', false)
+                            ]
+                        );
+                        counts[chatId] = result.total;
+                    } catch (error) {
+                        console.error(`Error counting unread for chat ${chatId}:`, error);
+                        counts[chatId] = 0;
+                    }
+                })
+            );
+            setUnreadCounts(counts);
+        } catch (error) {
+            console.error('Error fetching unread counts:', error);
+        }
+    };
 
     const fetchChats = async () => {
         if (!user) return;
         try {
             const data = await getMyChats(user.$id);
             setChats(data);
+            // Fetch unread counts for all chats
+            const chatIds = data.map((chat: any) => chat.$id);
+            await fetchUnreadCounts(chatIds);
         } catch (error) {
             console.error("Fetch Chats Error:", error);
         } finally {
@@ -138,6 +180,13 @@ const ChatListScreen = () => {
                         source={{ uri: item.otherUser?.avatar || 'https://via.placeholder.com/100' }}
                         className="w-14 h-14 rounded-full border-2 border-gray-50"
                     />
+                    {unreadCounts[item.$id] > 0 && (
+                        <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-[20px] h-5 items-center justify-center px-1 border-2 border-white">
+                            <Text className="text-white text-xs font-bold">
+                                {unreadCounts[item.$id] > 99 ? '99+' : unreadCounts[item.$id]}
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Content Area */}

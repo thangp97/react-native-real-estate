@@ -1,4 +1,4 @@
-import { getMessages, sendMessage } from '@/lib/api/chat';
+import { getMessages, markChatMessagesAsRead, sendMessage } from '@/lib/api/chat';
 import { client, config, databases } from '@/lib/appwrite';
 import { useGlobalContext } from '@/lib/global-provider';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,13 +49,23 @@ const ChatRoomScreen = () => {
 
     // ... (Giữ nguyên logic useEffect loadMessages & Realtime) ...
     useEffect(() => {
-        if (!chatId) return;
+        if (!chatId || !user?.$id) return;
+        
         const loadMessages = async () => {
             const data = await getMessages(chatId);
             setMessages(data);
             setLoading(false);
+            
+            // Đánh dấu tất cả tin nhắn là đã đọc khi vào trang chat
+            try {
+                await markChatMessagesAsRead(chatId, user.$id);
+            } catch (error) {
+                console.error("Lỗi đánh dấu tin nhắn đã đọc:", error);
+            }
         };
+        
         loadMessages();
+        
         const unsubscribe = client.subscribe(
             `databases.${config.databaseId}.collections.${config.messagesCollectionId}.documents`,
             (response) => {
@@ -63,12 +73,17 @@ const ChatRoomScreen = () => {
                     const newMessage = response.payload as any;
                     if (newMessage.chatId === chatId) {
                         setMessages(prev => [newMessage, ...prev]);
+                        
+                        // Tự động đánh dấu đã đọc nếu tin nhắn mới là của người khác gửi cho mình
+                        if (newMessage.receiverId === user.$id) {
+                            markChatMessagesAsRead(chatId, user.$id).catch(console.error);
+                        }
                     }
                 }
             }
         );
         return () => unsubscribe();
-    }, [chatId]);
+    }, [chatId, user?.$id]);
 
     // ... (Giữ nguyên logic handleSend) ...
     const handleSend = async () => {

@@ -30,18 +30,29 @@ export async function createNotification({
     relatedChatId
 }: CreateNotificationParams) {
     try {
+        // Build notification data dynamically to avoid sending undefined/null fields that don't exist in schema
+        const notificationData: any = {
+            userId,
+            message,
+            type,
+            isRead: false,
+        };
+
+        // Only add relatedPropertyId if it exists
+        if (relatedPropertyId) {
+            notificationData.relatedPropertyId = relatedPropertyId;
+        }
+
+        // Only add relatedChatId if it exists (and field is available in Appwrite)
+        if (relatedChatId) {
+            notificationData.relatedChatId = relatedChatId;
+        }
+
         const notification = await databases.createDocument(
             config.databaseId!,
             config.notificationsCollectionId!,
             ID.unique(),
-            {
-                userId,
-                message,
-                type,
-                isRead: false,
-                relatedPropertyId: relatedPropertyId || null,
-                relatedChatId: relatedChatId || null,
-            }
+            notificationData
         );
         return notification;
     } catch (error) {
@@ -56,10 +67,13 @@ export async function createNotification({
 export async function getUserNotifications(userId: string) {
     // Validate userId - phải là string không rỗng và hợp lệ
     if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+        console.log('[getUserNotifications] Invalid userId:', userId);
         return [];
     }
     
     try {
+        console.log('[getUserNotifications] Fetching notifications for userId:', userId.trim());
+        
         const result = await databases.listDocuments(
             config.databaseId!,
             config.notificationsCollectionId!,
@@ -69,6 +83,8 @@ export async function getUserNotifications(userId: string) {
                 Query.limit(100)
             ]
         );
+
+        console.log('[getUserNotifications] Found', result.total, 'notifications');
 
         // Lọc bỏ các thông báo liên quan đến property đã bị xóa
         const validNotifications = await Promise.all(
@@ -87,8 +103,9 @@ export async function getUserNotifications(userId: string) {
                     );
                     // Property tồn tại, giữ lại thông báo
                     return notification;
-                } catch {
+                } catch (propError) {
                     // Property không tồn tại (đã bị xóa), loại bỏ thông báo
+                    console.log('[getUserNotifications] Property not found, deleting notification:', notification.$id);
                     // Xóa thông báo khỏi database
                     try {
                         await databases.deleteDocument(
@@ -96,8 +113,8 @@ export async function getUserNotifications(userId: string) {
                             config.notificationsCollectionId!,
                             notification.$id
                         );
-                    } catch {
-                        // Ignore delete errors
+                    } catch (deleteError) {
+                        console.error('[getUserNotifications] Error deleting notification:', deleteError);
                     }
                     return null;
                 }
@@ -105,9 +122,11 @@ export async function getUserNotifications(userId: string) {
         );
 
         // Lọc bỏ các null (thông báo đã bị loại bỏ)
-        return validNotifications.filter((notification) => notification !== null);
+        const filtered = validNotifications.filter((notification) => notification !== null);
+        console.log('[getUserNotifications] Returning', filtered.length, 'valid notifications');
+        return filtered;
     } catch (error) {
-        console.error("Lỗi lấy thông báo:", error);
+        console.error("[getUserNotifications] Error:", error);
         return [];
     }
 }
