@@ -1,4 +1,5 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Audio, ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
     Alert,
@@ -14,6 +15,8 @@ import {
     ScrollView,
     Share // Added Share
     ,
+
+
 
 
     Text,
@@ -84,6 +87,22 @@ const Property = () => {
     const [priceModalVisible, setPriceModalVisible] = useState(false);
     const [newPriceInput, setNewPriceInput] = useState('');
     const [updatingPrice, setUpdatingPrice] = useState(false);
+
+    // Configure audio mode for video playback
+    useEffect(() => {
+        const configureAudio = async () => {
+            try {
+                await Audio.setAudioModeAsync({
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: false,
+                    shouldDuckAndroid: true,
+                });
+            } catch (error) {
+                console.warn('Error setting audio mode:', error);
+            }
+        };
+        configureAudio();
+    }, []);
 
     const handleUpdatePrice = async () => {
         const price = parseInt(newPriceInput.replace(/\D/g, ''));
@@ -528,6 +547,29 @@ const Property = () => {
                         </View>
                     )}
                 </View>
+
+                {/* Video Section */}
+                {property?.video && (
+                    <View className="px-5 mt-7">
+                        <Text className="text-xl font-rubik-bold text-black-300 mb-4">
+                            🎥 Video giới thiệu
+                        </Text>
+                        <Video
+                            source={{ uri: property.video }}
+                            useNativeControls
+                            resizeMode={ResizeMode.CONTAIN}
+                            isLooping={false}
+                            volume={1.0}
+                            isMuted={false}
+                            style={{
+                                width: '100%',
+                                height: 220,
+                                borderRadius: 12,
+                                backgroundColor: '#000',
+                            }}
+                        />
+                    </View>
+                )}
 
                 <View className="px-5 mt-7 flex gap-2">
                     <Text className="text-2xl font-rubik-extrabold">

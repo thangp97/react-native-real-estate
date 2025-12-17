@@ -1,3 +1,4 @@
+import { Audio, ResizeMode, Video } from 'expo-av';
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -120,6 +121,28 @@ const PropertyDetails = () => {
     const [loadingAgent, setLoadingAgent] = useState(true);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
+    // Combine property cover image with gallery images
+    const allImages = [
+        property?.image,
+        ...(galleryImages?.map((g: any) => g.image) || [])
+    ].filter(Boolean);
+
+    // Configure audio mode for video playback
+    useEffect(() => {
+        const configureAudio = async () => {
+            try {
+                await Audio.setAudioModeAsync({
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: false,
+                    shouldDuckAndroid: true,
+                });
+            } catch (error) {
+                console.warn('Error setting audio mode:', error);
+            }
+        };
+        configureAudio();
+    }, []);
+
     useEffect(() => {
         const fetchAgent = async () => {
             if (property && property.brokerId) {
@@ -193,19 +216,38 @@ const PropertyDetails = () => {
                 <View style={{ height: width * 0.8 }}>
                     {loadingGallery ? <ActivityIndicator /> : (
                         <FlatList
-                            data={galleryImages}
-                            keyExtractor={(item) => item.$id}
+                            data={allImages}
+                            keyExtractor={(item, index) => `image-${index}`}
                             horizontal
                             pagingEnabled
                             showsHorizontalScrollIndicator={false}
                             renderItem={({ item }) => (
-                                <TouchableOpacity onPress={() => setSelectedImage(item.image)}>
-                                    <Image source={{ uri: item.image }} style={{ width: width, height: '100%' }} resizeMode="cover" />
+                                <TouchableOpacity onPress={() => setSelectedImage(item)}>
+                                    <Image source={{ uri: item }} style={{ width: width, height: '100%' }} resizeMode="cover" />
                                 </TouchableOpacity>
                             )}
                         />
                     )}
                 </View>
+
+                {/* Video Section */}
+                {property.video && (
+                    <View style={{ paddingHorizontal: 20, marginTop: 28 }}>
+                        <Text style={styles.sectionTitle}>🎥 Video giới thiệu</Text>
+                        <Video
+                            source={{ uri: property.video }}
+                            useNativeControls
+                            resizeMode={ResizeMode.CONTAIN}
+                            style={{
+                                width: '100%',
+                                height: 220,
+                                borderRadius: 12,
+                                backgroundColor: '#000',
+                                marginTop: 12,
+                            }}
+                        />
+                    </View>
+                )}
 
                 <View className="z-50 absolute inset-x-7" style={{ top: Platform.OS === "ios" ? 70 : 40 }}>
                     <View className="flex-row items-center w-full justify-between">

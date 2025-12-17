@@ -4,6 +4,7 @@ declare module "react-native-appwrite" {
     namespace Models {
         interface Document {
             image?: string;
+            video?: string;
             rating?: number;
             name?: string;
             address?: string;

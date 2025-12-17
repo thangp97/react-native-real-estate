@@ -280,11 +280,6 @@ const Profile = () => {
                 {/* Header */}
                 <View style={styles.header}>
                     <Text style={styles.headerTitle}>Hồ sơ</Text>
-                    {user?.role === 'seller' && (
-                        <TouchableOpacity onPress={() => router.push('/seller-notifications')}>
-                            <Image source={icons.bell} style={styles.bellIcon} />
-                        </TouchableOpacity>
-                    )}
                 </View>
 
                 {/* Profile Card */}
