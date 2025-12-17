@@ -64,6 +64,7 @@ const ReviewPropertyDetailScreen = () => {
     // Video States
     const [newVideo, setNewVideo] = useState<ImagePicker.ImagePickerAsset | null>(null);
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+    const [isVideoLoading, setIsVideoLoading] = useState(true);
 
     // Form States
     const [form, setForm] = useState({
@@ -200,6 +201,8 @@ const ReviewPropertyDetailScreen = () => {
 
             if (propData) {
                 setProperty(propData);
+                console.log('[fetchData] Property loaded, video URL:', propData.video || 'No video');
+                
                 const allImgs = propData.image ? [propData.image] : [];
                 if (galleryDocs && galleryDocs.length > 0) {
                     galleryDocs.forEach((doc: any) => allImgs.push(doc.image));
@@ -285,6 +288,14 @@ const ReviewPropertyDetailScreen = () => {
         }
     }, [property]);
 
+    // Reset video loading when property video changes
+    useEffect(() => {
+        if (property?.video) {
+            console.log('[Video Effect] Property video updated:', property.video);
+            setIsVideoLoading(true);
+        }
+    }, [property?.video]);
+
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         fetchData();
@@ -307,19 +318,50 @@ const ReviewPropertyDetailScreen = () => {
 
     const pickVideo = async () => {
         try {
-            let result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['videos'],
-                allowsMultipleSelection: false,
-                quality: 1,
-            });
-            if (!result.canceled && result.assets && result.assets.length > 0) {
-                const video = result.assets[0];
-                // Kiểm tra kích thước video (giới hạn 50MB)
-                if (video.fileSize && video.fileSize > 50 * 1024 * 1024) {
-                    Alert.alert('Lỗi', 'Video phải nhỏ hơn 50MB. Vui lòng chọn video khác.');
-                    return;
+            // Nếu đã có video, xác nhận thay thế
+            if (property?.video) {
+                Alert.alert(
+                    'Xác nhận thay đổi',
+                    'Bạn muốn thay thế video hiện tại bằng video mới?',
+                    [
+                        { text: 'Hủy', style: 'cancel' },
+                        { 
+                            text: 'Thay đổi', 
+                            onPress: async () => {
+                                let result = await ImagePicker.launchImageLibraryAsync({
+                                    mediaTypes: ['videos'],
+                                    allowsMultipleSelection: false,
+                                    quality: 1,
+                                });
+                                if (!result.canceled && result.assets && result.assets.length > 0) {
+                                    const video = result.assets[0];
+                                    if (video.fileSize && video.fileSize > 50 * 1024 * 1024) {
+                                        Alert.alert('Lỗi', 'Video phải nhỏ hơn 50MB. Vui lòng chọn video khác.');
+                                        return;
+                                    }
+                                    setNewVideo(video);
+                                    setIsVideoLoading(true); // Reset loading state for new video
+                                }
+                            }
+                        }
+                    ]
+                );
+            } else {
+                // Chưa có video, chọn luôn
+                let result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['videos'],
+                    allowsMultipleSelection: false,
+                    quality: 1,
+                });
+                if (!result.canceled && result.assets && result.assets.length > 0) {
+                    const video = result.assets[0];
+                    if (video.fileSize && video.fileSize > 50 * 1024 * 1024) {
+                        Alert.alert('Lỗi', 'Video phải nhỏ hơn 50MB. Vui lòng chọn video khác.');
+                        return;
+                    }
+                    setNewVideo(video);
+                    setIsVideoLoading(true);
                 }
-                setNewVideo(video);
             }
         } catch (error) {
             Alert.alert("Thông báo", "Cần cấp quyền truy cập video.");
@@ -352,23 +394,49 @@ const ReviewPropertyDetailScreen = () => {
         if (!newVideo || !user) return;
         setIsUploadingVideo(true);
         try {
+            console.log('[handleUploadVideo] Bắt đầu upload video, size:', newVideo.fileSize);
+            
             // Upload video using same function as images (supports both)
             const videoUrl = await uploadFieldImage(newVideo);
+            
+            console.log('[handleUploadVideo] Video uploaded, URL:', videoUrl);
+            
             if (videoUrl) {
                 // Update property with video URL
                 const { databases, config } = await import('@/lib/appwrite');
+                
+                console.log('[handleUploadVideo] Cập nhật property với video URL');
+                console.log('[handleUploadVideo] Property ID:', id);
+                console.log('[handleUploadVideo] Collection ID:', config.propertiesCollectionId);
+                
                 await databases.updateDocument(
                     config.databaseId!,
-                    'properties',
+                    config.propertiesCollectionId!,
                     id,
                     { video: videoUrl }
                 );
-                Alert.alert("Thành công", "Đã lưu video thực địa.");
+                
+                console.log('[handleUploadVideo] ✅ Cập nhật thành công');
+                
+                // Update local property state with new video URL
+                setProperty((prev: any) => ({
+                    ...prev,
+                    video: videoUrl
+                }));
+                
+                Alert.alert("Thành công", property?.video ? "Đã cập nhật video mới!" : "Đã lưu video thực địa.");
                 setNewVideo(null);
+                setIsVideoLoading(true); // Trigger reload for new video
                 onRefresh();
+            } else {
+                console.error('[handleUploadVideo] videoUrl is null/undefined');
+                Alert.alert("Lỗi", "Không nhận được URL video sau khi upload.");
             }
-        } catch (error) {
-            Alert.alert("Lỗi", "Không thể tải video lên.");
+        } catch (error: any) {
+            console.error('[handleUploadVideo] ❌ Lỗi:', error);
+            console.error('[handleUploadVideo] Error message:', error.message);
+            console.error('[handleUploadVideo] Error code:', error.code);
+            Alert.alert("Lỗi", `Không thể tải video lên: ${error.message}`);
         } finally {
             setIsUploadingVideo(false);
         }
@@ -462,68 +530,96 @@ const ReviewPropertyDetailScreen = () => {
                     </TouchableOpacity>
                 )}
 
-                {/* Video Section */}
-                {(property?.video || newVideo) && (
-                    <View className="bg-white p-4 mx-4 mt-3 rounded-xl shadow-sm">
-                        <View className="flex-row items-center justify-between mb-3">
-                            <Text className="text-base font-rubik-bold text-gray-800">🎥 Video giới thiệu</Text>
-                            {property?.video && !newVideo && (
-                                <TouchableOpacity onPress={pickVideo} className="bg-blue-50 px-3 py-1.5 rounded-lg">
-                                    <Text className="text-blue-600 text-xs font-bold">Đổi video</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                        <Video
-                            source={{ uri: newVideo?.uri || property.video }}
-                            useNativeControls
-                            resizeMode={ResizeMode.CONTAIN}
-                            isLooping={false}
-                            volume={1.0}
-                            isMuted={false}
-                            style={{
-                                width: '100%',
-                                height: 220,
-                                borderRadius: 12,
-                                backgroundColor: '#000',
-                            }}
-                        />
-                        {newVideo && (
-                            <View className="flex-row gap-2 mt-3">
-                                <TouchableOpacity 
-                                    onPress={handleUploadVideo} 
-                                    disabled={isUploadingVideo}
-                                    className="flex-1 bg-green-600 py-2.5 rounded-lg flex-row justify-center items-center"
-                                >
-                                    {isUploadingVideo ? (
-                                        <ActivityIndicator color="white" size="small" />
-                                    ) : (
-                                        <>
-                                            <Ionicons name="cloud-upload-outline" size={18} color="white" />
-                                            <Text className="text-white font-bold ml-2 text-sm">Lưu video</Text>
-                                        </>
-                                    )}
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    onPress={() => setNewVideo(null)}
-                                    className="bg-gray-200 px-4 py-2.5 rounded-lg"
-                                >
-                                    <Text className="text-gray-700 font-bold text-sm">Hủy</Text>
-                                </TouchableOpacity>
-                            </View>
+                {/* Video Section - Always show container */}
+                <View className="bg-white p-4 mx-4 mt-3 rounded-xl shadow-sm">
+                    <View className="flex-row items-center justify-between mb-3">
+                        <Text className="text-base font-rubik-bold text-gray-800">🎥 Video thực địa</Text>
+                        {property?.video && !newVideo && (
+                            <TouchableOpacity onPress={pickVideo} className="bg-blue-50 px-3 py-1.5 rounded-lg flex-row items-center">
+                                <Ionicons name="refresh-outline" size={14} color="#2563eb" />
+                                <Text className="text-blue-600 text-xs font-bold ml-1">Đổi video</Text>
+                            </TouchableOpacity>
                         )}
                     </View>
-                )}
 
-                {/* Add Video Button if no video exists */}
-                {!property?.video && !newVideo && (
-                    <TouchableOpacity 
-                        onPress={pickVideo}
-                        className="bg-purple-50 mx-4 mt-3 py-3 rounded-xl flex-row justify-center items-center border border-purple-200"
-                    >
-                        <Ionicons name="videocam-outline" size={20} color="#9333ea" />
-                        <Text className="text-purple-600 font-bold ml-2">Thêm video thực địa</Text>
-                    </TouchableOpacity>
-                )}
+                    {(property?.video || newVideo) ? (
+                        <>
+                            <View className="relative">
+                                <Video
+                                    key={`video-${newVideo?.uri || property.video}-${Date.now()}`}
+                                    source={{ uri: newVideo?.uri || property.video }}
+                                    useNativeControls
+                                    resizeMode={ResizeMode.COVER}
+                                    isLooping={false}
+                                    volume={1.0}
+                                    isMuted={false}
+                                    shouldPlay={false}
+                                    onLoadStart={() => {
+                                        console.log('[Video] Bắt đầu load video...');
+                                        setIsVideoLoading(true);
+                                    }}
+                                    onLoad={(data) => {
+                                        console.log('[Video] Video loaded successfully', data);
+                                        setIsVideoLoading(false);
+                                    }}
+                                    onError={(error) => {
+                                        console.error('[Video] Error loading video:', error);
+                                        setIsVideoLoading(false);
+                                        Alert.alert('Lỗi video', 'Không thể tải video. Vui lòng kiểm tra lại URL hoặc thử tải lại trang.');
+                                    }}
+                                    onReadyForDisplay={() => {
+                                        console.log('[Video] Video ready for display');
+                                        setIsVideoLoading(false);
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        height: 220,
+                                        borderRadius: 12,
+                                        backgroundColor: '#000',
+                                    }}
+                                />
+                                {isVideoLoading && (
+                                    <View className="absolute inset-0 items-center justify-center bg-black/50 rounded-xl">
+                                        <ActivityIndicator size="large" color="#fff" />
+                                        <Text className="text-white mt-2 text-sm">Đang tải video...</Text>
+                                    </View>
+                                )}
+                            </View>
+                            {newVideo && (
+                                <View className="flex-row gap-2 mt-3">
+                                    <TouchableOpacity 
+                                        onPress={handleUploadVideo} 
+                                        disabled={isUploadingVideo}
+                                        className="flex-1 bg-green-600 py-2.5 rounded-lg flex-row justify-center items-center"
+                                    >
+                                        {isUploadingVideo ? (
+                                            <ActivityIndicator color="white" size="small" />
+                                        ) : (
+                                            <>
+                                                <Ionicons name="cloud-upload-outline" size={18} color="white" />
+                                                <Text className="text-white font-bold ml-2 text-sm">Lưu video</Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        onPress={() => setNewVideo(null)}
+                                        className="bg-gray-200 px-4 py-2.5 rounded-lg"
+                                    >
+                                        <Text className="text-gray-700 font-bold text-sm">Hủy</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </>
+                    ) : (
+                        <TouchableOpacity 
+                            onPress={pickVideo}
+                            className="bg-purple-50 py-8 rounded-xl flex-row justify-center items-center border-2 border-dashed border-purple-300"
+                        >
+                            <Ionicons name="videocam-outline" size={32} color="#9333ea" />
+                            <Text className="text-purple-600 font-bold ml-3 text-base">Thêm video thực địa</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
 
                 {/* INFO CARD */}
                 <View className="bg-white p-5 mb-3 mt-3 border-t border-gray-100 shadow-sm">
