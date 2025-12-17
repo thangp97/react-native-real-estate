@@ -1,5 +1,5 @@
+import { getUnreadNotificationCount, getUserNotifications, markAllNotificationsAsRead, markNotificationAsRead } from '@/lib/api/notifications';
 import { useGlobalContext } from '@/lib/global-provider';
-import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadNotificationCount } from '@/lib/api/notifications';
 import { useAppwrite } from '@/lib/useAppwrite';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -17,16 +17,16 @@ const NotificationsScreen = () => {
         loading,
         refetch
     } = useAppwrite({
-        fn: getUserNotifications,
-        params: user?.$id || '',
+        fn: (params: any) => getUserNotifications(params.userId),
+        params: { userId: user?.$id || '' },
         skip: !user?.$id || !user?.$id.trim()
     });
 
     useEffect(() => {
-        if (user?.$id) {
+        if (user?.$id && user.$id.trim()) {
             loadUnreadCount();
         }
-    }, [user?.$id, notifications]);
+    }, [user?.$id]);
 
     const loadUnreadCount = async () => {
         if (!user?.$id) return;
@@ -39,9 +39,10 @@ const NotificationsScreen = () => {
     };
 
     const handleMarkAsRead = async (notificationId: string) => {
+        if (!user?.$id) return;
         try {
             await markNotificationAsRead(notificationId);
-            await refetch({});
+            await refetch({ userId: user.$id });
             await loadUnreadCount();
         } catch (error) {
             console.error("Lỗi đánh dấu đã đọc:", error);
@@ -52,7 +53,7 @@ const NotificationsScreen = () => {
         if (!user?.$id) return;
         try {
             await markAllNotificationsAsRead(user.$id);
-            await refetch({});
+            await refetch({ userId: user.$id });
             await loadUnreadCount();
             Alert.alert("Thành công", "Đã đánh dấu tất cả thông báo là đã đọc");
         } catch (error) {
@@ -64,6 +65,15 @@ const NotificationsScreen = () => {
         // Đánh dấu đã đọc
         if (!notification.isRead) {
             await handleMarkAsRead(notification.$id);
+        }
+
+        // Xử lý thông báo tin nhắn cho tất cả roles
+        if (notification.type === 'new_message' && notification.relatedChatId) {
+            router.push({
+                pathname: "/chat/[id]",
+                params: { id: notification.relatedChatId }
+            });
+            return;
         }
 
         // Logic điều hướng theo role và loại thông báo
@@ -194,8 +204,10 @@ const NotificationsScreen = () => {
                     <RefreshControl
                         refreshing={loading}
                         onRefresh={() => {
-                            refetch({});
-                            loadUnreadCount();
+                            if (user?.$id) {
+                                refetch({ userId: user.$id });
+                                loadUnreadCount();
+                            }
                         }}
                     />
                 }
@@ -235,8 +247,10 @@ const NotificationsScreen = () => {
                                         <Text style={styles.dateText}>
                                             {formatDate(item.$createdAt)}
                                         </Text>
-                                        {isUnread && (
+                                        {isUnread ? (
                                             <View style={styles.unreadDot} />
+                                        ) : (
+                                            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
                                         )}
                                     </View>
                                     <Text style={[

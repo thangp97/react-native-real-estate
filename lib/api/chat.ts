@@ -168,3 +168,35 @@ export async function getMyChats(userId: string) {
         throw error; // Ném lỗi để UI xử lý (nếu có lỗi Permissions)
     }
 }
+
+// 5. Đánh dấu tất cả tin nhắn trong chat là đã đọc
+export async function markChatMessagesAsRead(chatId: string, userId: string) {
+    try {
+        // Lấy tất cả tin nhắn chưa đọc trong chat mà người dùng hiện tại là người nhận
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.messagesCollectionId!,
+            [
+                Query.equal('chatId', chatId),
+                Query.equal('receiverId', userId),
+                Query.equal('isRead', false)
+            ]
+        );
+
+        // Đánh dấu từng tin nhắn là đã đọc
+        const updatePromises = result.documents.map(message =>
+            databases.updateDocument(
+                config.databaseId!,
+                config.messagesCollectionId!,
+                message.$id,
+                { isRead: true }
+            )
+        );
+
+        await Promise.all(updatePromises);
+        console.log(`[markChatMessagesAsRead] Đã đánh dấu ${result.documents.length} tin nhắn là đã đọc`);
+    } catch (error) {
+        console.error("Lỗi đánh dấu tin nhắn đã đọc:", error);
+        throw error;
+    }
+}
