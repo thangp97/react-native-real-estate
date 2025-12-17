@@ -2,6 +2,7 @@ import { getPriceHistory } from '@/lib/api/seller';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View, Dimensions, ScrollView } from 'react-native';
 import { formatCurrency } from '@/lib/utils';
+import { useGlobalContext } from '@/lib/global-provider';
 
 interface PriceHistoryRecord {
     $id: string;
@@ -10,8 +11,9 @@ interface PriceHistoryRecord {
     oldPrice: number;
     newPrice: number;
     changedBy: string;
-    reason?: string;
+    reason?: string; // Note/Reason
     changedAt: string;
+    note?: string; // Fallback if API uses note
 }
 
 interface PriceHistoryProps {
@@ -44,6 +46,7 @@ const ChartBar = ({ price, maxPrice, minPrice, date, isLatest }: { price: number
 };
 
 export default function PriceHistory({ propertyId }: PriceHistoryProps) {
+    const { user } = useGlobalContext();
     const [history, setHistory] = useState<PriceHistoryRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -105,6 +108,8 @@ export default function PriceHistory({ propertyId }: PriceHistoryProps) {
     const maxPrice = Math.max(...prices);
     const minPrice = Math.min(...prices);
 
+    const canSeeDetails = user?.role === 'broker' || user?.role === 'seller';
+
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Biến động giá</Text>
@@ -133,6 +138,7 @@ export default function PriceHistory({ propertyId }: PriceHistoryProps) {
                     const priceChange = record.newPrice - record.oldPrice;
                     const priceChangePercent = ((priceChange / record.oldPrice) * 100);
                     const isIncrease = priceChange > 0;
+                    const displayReason = record.reason || record.note;
 
                     return (
                         <View key={record.$id} style={styles.historyCard}>
@@ -163,8 +169,8 @@ export default function PriceHistory({ propertyId }: PriceHistoryProps) {
                                 </Text>
                             </View>
                             
-                            {record.reason && (
-                                <Text style={styles.reasonText}>"{record.reason}"</Text>
+                            {canSeeDetails && displayReason && (
+                                <Text style={styles.reasonText}>"{displayReason}"</Text>
                             )}
                         </View>
                     );

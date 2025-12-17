@@ -88,6 +88,7 @@ const Property = () => {
     // State for Update Price Logic
     const [priceModalVisible, setPriceModalVisible] = useState(false);
     const [newPriceInput, setNewPriceInput] = useState('');
+    const [priceReason, setPriceReason] = useState('');
     const [updatingPrice, setUpdatingPrice] = useState(false);
 
     // Configure audio mode for video playback
@@ -115,9 +116,10 @@ const Property = () => {
 
         setUpdatingPrice(true);
         try {
-            await updatePropertyPrice(id!, price, user!.$id);
+            await updatePropertyPrice(id!, price, user!.$id, priceReason);
             Alert.alert("Thành công", "Đã cập nhật giá mới!");
             setPriceModalVisible(false);
+            setPriceReason('');
             // Reload page to reflect new price
             router.replace({ pathname: '/properties/[id]', params: { id } });
         } catch (error) {
@@ -222,7 +224,11 @@ const Property = () => {
 
     // Carousel Logic
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const allImages = property ? [property.image, ...(property.galleryImages || [])].filter(Boolean) : [];
+    const allImages = property ? [
+        { uri: property.image, isBroker: false },
+        ...(property.gallery?.map((g: any) => ({ uri: g.image, isBroker: g.isBroker })) 
+           || (property.galleryImages || []).map((img: string) => ({ uri: img, isBroker: false })))
+    ].filter((item) => item.uri) : [];
 
     const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
         if (viewableItems.length > 0) {
@@ -533,11 +539,21 @@ const Property = () => {
                         onViewableItemsChanged={onViewableItemsChanged}
                         viewabilityConfig={viewabilityConfig}
                         renderItem={({ item }) => (
-                            <Image
-                                source={{ uri: item }}
-                                style={{ width: windowWidth, height: windowHeight / 2 }}
-                                resizeMode="cover"
-                            />
+                            <View style={{ width: windowWidth, height: windowHeight / 2, position: 'relative' }}>
+                                <Image
+                                    source={{ uri: item.uri }}
+                                    style={{ width: '100%', height: '100%' }}
+                                    resizeMode="cover"
+                                />
+                                {item.isBroker && (
+                                    <View className="absolute bottom-12 left-5 bg-white/95 px-3 py-1.5 rounded-lg flex-row items-center gap-1.5 shadow-sm z-10 border border-blue-100">
+                                         <Image source={icons.shield} className="size-3.5" tintColor="#0061FF" />
+                                         <Text className="text-[#0061FF] font-rubik-medium text-xs">
+                                             Ảnh xác thực bởi môi giới
+                                         </Text>
+                                    </View>
+                                )}
+                            </View>
                         )}
                     />
                     
@@ -946,6 +962,14 @@ const Property = () => {
                                 onChangeText={(text) => {
                                     setNewPriceInput(text);
                                 }}
+                            />
+
+                            <Text className="font-rubik-medium mb-2">Lý do thay đổi (Tùy chọn):</Text>
+                            <TextInput 
+                                style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, marginBottom: 20 }}
+                                placeholder="Ví dụ: Giảm giá kích cầu, điều chỉnh theo thị trường..."
+                                value={priceReason}
+                                onChangeText={setPriceReason}
                             />
 
                             <View className="flex-row justify-end gap-3">

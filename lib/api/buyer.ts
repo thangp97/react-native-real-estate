@@ -177,6 +177,15 @@ export async function getPropertyById({ id }: { id: string }) {
         // Trích xuất URL ảnh và gán vào property.galleryImages
         property.galleryImages = galleryResult.documents.map((doc) => doc.image);
 
+        // Tạo mảng gallery đầy đủ thông tin (để check người up ảnh)
+        const brokerId = property.brokerId?.$id || property.brokerId;
+        property.gallery = galleryResult.documents.map((doc) => ({
+            id: doc.$id,
+            image: doc.image,
+            uploaderId: doc.uploaderId,
+            isBroker: brokerId && doc.uploaderId === brokerId // Check nếu người up là broker của bài đăng
+        }));
+
         return property;
 
     } catch (error) {
@@ -328,6 +337,7 @@ export async function getBuyerBookings(userId: string) {
         // Manually fetch property details for each booking to ensure data availability
         const enrichedBookings = await Promise.all(result.documents.map(async (booking: any) => {
             try {
+                // Enrich Property Info
                 // Case 1: property is a string ID
                 if (booking.property && typeof booking.property === 'string') {
                     const propertyData = await getPropertyById({ id: booking.property });
@@ -345,8 +355,35 @@ export async function getBuyerBookings(userId: string) {
                         }
                     }
                 }
-                // Case 3: property is missing (null/undefined) - Data integrity issue
-                // We can't do much if we don't have an ID.
+                
+                // Enrich Agent Info (Fix for "Anonymous" issue)
+                if (booking.agent && typeof booking.agent === 'string') {
+                    try {
+                        const agentProfile = await databases.getDocument(
+                            config.databaseId!,
+                            config.profilesCollectionId!,
+                            booking.agent
+                        );
+                        booking.agent = agentProfile;
+                    } catch {
+                        console.warn(`[BuyerBookings] Could not fetch agent profile for booking ${booking.$id}`);
+                    }
+                } else if (booking.agent && typeof booking.agent === 'object' && !booking.agent.name) {
+                     // Try to fetch if name is missing but we have ID
+                     if (booking.agent.$id) {
+                         try {
+                            const agentProfile = await databases.getDocument(
+                                config.databaseId!,
+                                config.profilesCollectionId!,
+                                booking.agent.$id
+                            );
+                            booking.agent = agentProfile;
+                         } catch {
+                             console.warn(`[BuyerBookings] Could not fetch agent profile for booking ${booking.$id}`);
+                         }
+                     }
+                }
+
             } catch (err) {
                 console.error(`Failed to enrich booking ${booking.$id}:`, err);
             }
