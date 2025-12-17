@@ -34,6 +34,7 @@ import images from "@/constants/images";
 import MortgageCalculator from "@/components/MortgageCalculator";
 import PriceHistory from "@/components/PriceHistory";
 import { createBooking, getPropertyById, getSimilarProperties, togglePropertyFavorite } from "@/lib/api/buyer";
+import { getOrCreateChat } from "@/lib/api/chat";
 import { useComparisonContext } from "@/lib/comparison-provider";
 import { useGlobalContext } from "@/lib/global-provider";
 import { useAppwrite } from "@/lib/useAppwrite";
@@ -322,7 +323,14 @@ const Property = () => {
                 address: property.address,
                 image: property.image,
                 type: property.type,
-                facilities: property.facilities || []
+                facilities: property.facilities || [],
+                // New fields
+                region: property.region,
+                direction: property.direction,
+                floors: property.floors,
+                roadWidth: property.roadWidth,
+                depth: property.depth,
+                frontage: property.frontage,
             });
         }
     };
@@ -360,6 +368,43 @@ const Property = () => {
             Linking.openURL(`sms:${currentBroker.phone}`);
         } else {
             Linking.openURL(`tel:${currentBroker.phone}`);
+        }
+    };
+
+    const handleInternalChat = async () => {
+        if (!user) {
+            Alert.alert("Thông báo", "Vui lòng đăng nhập để chat với môi giới.");
+            return;
+        }
+
+        // Xác định ID của môi giới/người bán
+        let targetId = null;
+        if (property?.agent?.$id) {
+            targetId = property.agent.$id;
+        } else if (property?.brokerId) {
+            targetId = typeof property.brokerId === 'object' ? property.brokerId.$id : property.brokerId;
+        }
+
+        if (!targetId) {
+            Alert.alert("Lỗi", "Không tìm thấy thông tin người liên hệ.");
+            return;
+        }
+
+        try {
+            const chatDoc = await getOrCreateChat(user.$id, targetId);
+            
+            router.push({
+                pathname: '/chat/[id]',
+                params: { 
+                    id: chatDoc.$id,
+                    otherUserId: targetId,
+                    otherUserName: currentBroker.name,
+                    otherUserAvatar: typeof currentBroker.avatar === 'object' ? currentBroker.avatar.uri : currentBroker.avatar
+                }
+            });
+        } catch (error) {
+            console.error("Lỗi tạo chat:", error);
+            Alert.alert("Lỗi", "Không thể kết nối trò chuyện. Vui lòng thử lại sau.");
         }
     };
 
@@ -656,7 +701,7 @@ const Property = () => {
                             </TouchableOpacity>
 
                             <View className="flex flex-row items-center gap-3">
-                                <TouchableOpacity onPress={() => handleContact('sms')}>
+                                <TouchableOpacity onPress={handleInternalChat}>
                                     <Image source={icons.chat} className="size-7" />
                                 </TouchableOpacity>
                                 <TouchableOpacity onPress={() => handleContact('call')}>
@@ -1116,9 +1161,11 @@ const Property = () => {
                 visible={comparisonModalVisible}
                 onRequestClose={() => setComparisonModalVisible(false)}
             >
-                <SafeAreaView className="flex-1 bg-white">
-                    <View className="px-5 py-4 flex-row items-center justify-between border-b border-gray-100"
-                          style={{ paddingTop: Platform.OS === 'ios' ? 0 : 10 }} // Adjust padding for Android
+                <View className="flex-1 bg-white">
+                    {/* Header cố định */}
+                    <View 
+                        className="px-5 pb-4 flex-row items-center justify-between border-b border-gray-100 bg-white z-10"
+                        style={{ paddingTop: Platform.OS === 'ios' ? 60 : 20 }} 
                     >
                         <Text className="text-xl font-rubik-bold text-black-300">So sánh Bất động sản</Text>
                         <View className="flex-row gap-4">
@@ -1131,68 +1178,151 @@ const Property = () => {
                         </View>
                     </View>
                     
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        <View className="flex-row p-5 gap-5">
-                            {/* Labels Column */}
-                            <View className="w-24 pt-40 gap-8 mt-5">
-                                <Text className="font-rubik-medium text-black-200">Giá</Text>
-                                <Text className="font-rubik-medium text-black-200">Diện tích</Text>
-                                <Text className="font-rubik-medium text-black-200">Phòng ngủ</Text>
-                                <Text className="font-rubik-medium text-black-200">Phòng tắm</Text>
-                                <Text className="font-rubik-medium text-black-200">Loại hình</Text>
-                                <Text className="font-rubik-medium text-black-200">Địa chỉ</Text>
-                            </View>
+                    {/* ScrollView DỌC bao quanh nội dung */}
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+                        {/* ScrollView NGANG cho các cột */}
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <View className="flex-row p-5 gap-5">
+                                {/* Labels Column */}
+                                <View className="w-24 pt-4 border border-transparent">
+                                    {/* Ghost Header để đồng bộ chiều cao với Card bên phải */}
+                                    <View className="h-32 mb-3" /> {/* Khớp với Image */}
+                                    <View className="h-12 mb-6" /> {/* Khớp với Title */}
+                                    
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Giá</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Diện tích</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Khu vực</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Hướng</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Số tầng</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Phòng ngủ</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Phòng tắm</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Mặt tiền</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Chiều sâu</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Đường rộng</Text></View>
+                                    <View className="justify-center" style={{ height: 50 }}><Text className="font-rubik-medium text-black-200">Loại hình</Text></View>
+                                    <View className="justify-center" style={{ height: 60 }}><Text className="font-rubik-medium text-black-200">Địa chỉ</Text></View>
+                                </View>
 
-                            {/* Property Columns */}
-                            {compareList.map((item) => (
-                                <View key={item.$id} className="w-48 bg-gray-50 rounded-2xl p-4 shadow-sm border border-gray-100 relative">
-                                    <TouchableOpacity 
-                                        onPress={() => removeFromCompare(item.$id)}
-                                        className="absolute top-2 right-2 z-10 bg-white rounded-full p-1 shadow-sm"
-                                    >
-                                        <Text className="text-xs text-red-500 font-bold">✕</Text>
-                                    </TouchableOpacity>
-                                    
-                                    <Image source={{ uri: item.image }} className="w-full h-32 rounded-xl mb-3" />
-                                    <Text numberOfLines={2} className="font-rubik-bold text-black-300 mb-6 h-12 text-center">
-                                        {item.name}
-                                    </Text>
-                                    
-                                    <View className="gap-8">
-                                        <Text className="font-rubik-bold text-primary-300 text-center">
-                                            {formatCurrency(item.price)}
+                                {/* Property Columns */}
+                                {compareList.map((item) => (
+                                    <View key={item.$id} className="w-48 bg-gray-50 rounded-2xl p-4 shadow-sm border border-gray-100 relative">
+                                        <TouchableOpacity 
+                                            onPress={() => removeFromCompare(item.$id)}
+                                            className="absolute top-2 right-2 z-10 bg-white rounded-full p-1 shadow-sm"
+                                        >
+                                            <Text className="text-xs text-red-500 font-bold">✕</Text>
+                                        </TouchableOpacity>
+                                        
+                                        {/* Header Section: Fixed Height Calculation 
+                                            Image: h-32 (128px) 
+                                            mb-3: 12px
+                                            Text: h-12 (48px)
+                                            mb-6: 24px
+                                            Total: 212px
+                                        */}
+                                        <Image source={{ uri: item.image }} className="w-full h-32 rounded-xl mb-3" />
+                                        <Text numberOfLines={2} className="font-rubik-bold text-black-300 mb-6 h-12 text-center">
+                                            {item.name}
                                         </Text>
-                                        <Text className="font-rubik-medium text-center">{item.area} m²</Text>
-                                        <Text className="font-rubik-medium text-center">{item.bedrooms}</Text>
-                                        <Text className="font-rubik-medium text-center">{item.bathrooms}</Text>
-                                        <Text className="font-rubik-medium text-center">{item.type}</Text>
-                                        <Text numberOfLines={3} className="font-rubik text-xs text-center h-12 text-gray-500">
-                                            {item.address}
+                                        
+                                        {/* Data Rows: Fixed Heights matching Labels */}
+                                        <View>
+                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                <Text className="font-rubik-bold text-primary-300 text-center">
+                                                    {formatCurrency(item.price)}
+                                                </Text>
+                                            </View>
+                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                <Text className="font-rubik-medium text-center">{item.area} m²</Text>
+                                            </View>
+                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                <Text className="font-rubik-medium text-center">
+                                                    {item.region === 'TPHCM' ? 'Hồ Chí Minh' : 
+                                                     item.region === 'HaNoi' ? 'Hà Nội' : 
+                                                     item.region === 'DaNang' ? 'Đà Nẵng' : 
+                                                     item.region === 'BinhDuong' ? 'Bình Dương' : 
+                                                     item.region === 'DongNai' ? 'Đồng Nai' : 
+                                                     item.region === 'CanTho' ? 'Cần Thơ' : 
+                                                     item.region || '-'}
+                                                </Text>
+                                            </View>
+                                                                                                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                                                                                                <Text className="font-rubik-medium text-center">
+                                                                                                                                    {(() => {
+                                                                                                                                        const directions: Record<string, string> = {
+                                                                                                                                            'north': 'Bắc', 'south': 'Nam', 'east': 'Đông', 'west': 'Tây',
+                                                                                                                                            'northeast': 'Đông Bắc', 'northwest': 'Tây Bắc', 'southeast': 'Đông Nam', 'southwest': 'Tây Nam'
+                                                                                                                                        };
+                                                                                                                                        const lowerCaseDirection = item.direction ? item.direction.toLowerCase() : '';
+                                                                                                                                        return directions[lowerCaseDirection] || item.direction || '-';
+                                                                                                                                    })()}
+                                                                                                                                </Text>
+                                                                                                                            </View>                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                <Text className="font-rubik-medium text-center">{item.floors !== undefined ? item.floors : '-'}</Text>
+                                            </View>
+                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                <Text className="font-rubik-medium text-center">{item.bedrooms}</Text>
+                                            </View>
+                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                <Text className="font-rubik-medium text-center">{item.bathrooms}</Text>
+                                            </View>
+                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                <Text className="font-rubik-medium text-center">{item.frontage ? `${item.frontage}m` : '-'}</Text>
+                                            </View>
+                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                <Text className="font-rubik-medium text-center">{item.depth ? `${item.depth}m` : '-'}</Text>
+                                            </View>
+                                            <View className="justify-center items-center" style={{ height: 50 }}>
+                                                <Text className="font-rubik-medium text-center">{item.roadWidth ? `${item.roadWidth}m` : '-'}</Text>
+                                            </View>
+                                                                                    <View className="justify-center items-center" style={{ height: 50 }}>
+                                                                                        <Text className="font-rubik-medium text-center">
+                                                                                            {(() => {
+                                                                                                const types: Record<string, string> = {
+                                                                                                    'apartment': 'Căn hộ',
+                                                                                                    'house': 'Nhà phố',
+                                                                                                    'villa': 'Biệt thự',
+                                                                                                    'land': 'Đất nền',
+                                                                                                    'office': 'Văn phòng',
+                                                                                                    'shop': 'Cửa hàng',
+                                                                                                    'warehouse': 'Kho xưởng',
+                                                                                                    'byroad': 'Mặt tiền',
+                                                                                                    'alley': 'Trong hẻm'
+                                                                                                };
+                                                                                                const lowerCaseType = item.type ? item.type.toLowerCase() : '';
+                                                                                                return types[lowerCaseType] || item.type || '-';
+                                                                                            })()}
+                                                                                        </Text>
+                                                                                    </View>                                            <View className="justify-center items-center" style={{ height: 60 }}>
+                                                <Text numberOfLines={3} className="font-rubik text-xs text-center text-gray-500">
+                                                    {item.address}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        
+                                        <TouchableOpacity 
+                                            onPress={() => {
+                                                setComparisonModalVisible(false);
+                                                router.push(`/properties/${item.$id}`);
+                                            }}
+                                            className="mt-6 bg-primary-300 py-2 rounded-lg"
+                                        >
+                                            <Text className="text-white text-center font-rubik-bold text-xs">Xem chi tiết</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+
+                                {compareList.length < 2 && (
+                                    <View className="w-48 bg-gray-100 rounded-2xl items-center justify-center border-2 border-dashed border-gray-300">
+                                        <Text className="text-gray-400 font-rubik text-center px-4">
+                                            Thêm BĐS khác để so sánh
                                         </Text>
                                     </View>
-                                    
-                                    <TouchableOpacity 
-                                        onPress={() => {
-                                            setComparisonModalVisible(false);
-                                            router.push(`/properties/${item.$id}`);
-                                        }}
-                                        className="mt-6 bg-primary-300 py-2 rounded-lg"
-                                    >
-                                        <Text className="text-white text-center font-rubik-bold text-xs">Xem chi tiết</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            ))}
-
-                            {compareList.length < 2 && (
-                                <View className="w-48 bg-gray-100 rounded-2xl items-center justify-center border-2 border-dashed border-gray-300">
-                                    <Text className="text-gray-400 font-rubik text-center px-4">
-                                        Thêm BĐS khác để so sánh
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
+                                )}
+                            </View>
+                        </ScrollView>
                     </ScrollView>
-                </SafeAreaView>
+                </View>
             </Modal>
         </View>
     );

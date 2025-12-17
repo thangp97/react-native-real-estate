@@ -12,6 +12,13 @@ interface Property {
     image: string;
     type: string;
     facilities: string[];
+    // New fields
+    region?: string;
+    direction?: string;
+    floors?: number;
+    roadWidth?: number;
+    depth?: number;
+    frontage?: number;
 }
 
 interface ComparisonContextType {

@@ -109,6 +109,7 @@ export async function getPropertyById({ id }: { id: string }) {
             [
                 Query.select([
                     '*', 
+                    'region', 'direction', 'floors', 'roadWidth', 'depth', 'frontage',
                     'brokerId.name', 'brokerId.email', 'brokerId.avatar', 'brokerId.$id',
                     'seller.name', 'seller.email', 'seller.avatar', 'seller.$id'
                 ])

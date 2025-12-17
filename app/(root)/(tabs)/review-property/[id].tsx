@@ -245,6 +245,7 @@ const ReviewPropertyDetailScreen = () => {
             });
 
             const json = await response.json();
+            console.log("AI API Response:", JSON.stringify(json, null, 2));
 
             if (json.status === 'success') {
                 setAiPrediction(json.predicted_price_range);

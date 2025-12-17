@@ -2,7 +2,7 @@ export const formatStatus = (status: string) => {
     switch (status) {
         case 'pending_approval': return 'Chờ duyệt';
         case 'reviewing': return 'Đang xem xét';
-        case 'approved': return 'Đã duyệt';
+        case 'approved': return 'Đang bán';
         case 'deposit_paid': return 'Đã cọc';
         case 'sold': return 'Đã bán';
         case 'rejected': return 'Bị từ chối';
