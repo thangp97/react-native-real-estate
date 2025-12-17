@@ -65,6 +65,7 @@ const ReviewPropertyDetailScreen = () => {
     const [newVideo, setNewVideo] = useState<ImagePicker.ImagePickerAsset | null>(null);
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
     const [isVideoLoading, setIsVideoLoading] = useState(true);
+    const [isVideoUpdating, setIsVideoUpdating] = useState(false);
 
     // Form States
     const [form, setForm] = useState({
@@ -419,6 +420,7 @@ const ReviewPropertyDetailScreen = () => {
                 console.log('[handleUploadVideo] ✅ Cập nhật thành công');
                 
                 // Update local property state with new video URL
+                setIsVideoUpdating(true); // Mark as updating to suppress error alerts
                 setProperty((prev: any) => ({
                     ...prev,
                     video: videoUrl
@@ -427,6 +429,12 @@ const ReviewPropertyDetailScreen = () => {
                 Alert.alert("Thành công", property?.video ? "Đã cập nhật video mới!" : "Đã lưu video thực địa.");
                 setNewVideo(null);
                 setIsVideoLoading(true); // Trigger reload for new video
+                
+                // Clear updating flag after video has time to load
+                setTimeout(() => {
+                    setIsVideoUpdating(false);
+                }, 3000);
+                
                 onRefresh();
             } else {
                 console.error('[handleUploadVideo] videoUrl is null/undefined');
@@ -565,7 +573,10 @@ const ReviewPropertyDetailScreen = () => {
                                     onError={(error) => {
                                         console.error('[Video] Error loading video:', error);
                                         setIsVideoLoading(false);
-                                        Alert.alert('Lỗi video', 'Không thể tải video. Vui lòng kiểm tra lại URL hoặc thử tải lại trang.');
+                                        // Only show alert if not currently updating video
+                                        if (!isVideoUpdating) {
+                                            Alert.alert('Lỗi video', 'Không thể tải video. Vui lòng kiểm tra lại URL hoặc thử tải lại trang.');
+                                        }
                                     }}
                                     onReadyForDisplay={() => {
                                         console.log('[Video] Video ready for display');
