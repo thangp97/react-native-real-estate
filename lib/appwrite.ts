@@ -101,6 +101,40 @@ export async function createUser(email: string, password: string, username: stri
             newAccount.$id, 
             profileData
         );
+
+        // Tạo agent document nếu role là broker
+        if (role === 'broker') {
+            console.log('[createUser] Đang tạo Agent document cho broker với ID:', newAccount.$id);
+            try {
+                const agentData = {
+                    name: username,
+                    email: email,
+                };
+
+                console.log('[createUser] Agent data chuẩn bị tạo:', JSON.stringify(agentData, null, 2));
+                console.log('[createUser] Database ID:', config.databaseId);
+                console.log('[createUser] Agents Collection ID:', config.agentsCollectionId);
+
+                const agentDoc = await databases.createDocument(
+                    config.databaseId!,
+                    config.agentsCollectionId!,
+                    newAccount.$id, // Sử dụng cùng ID với profile
+                    agentData
+                );
+
+                console.log('[createUser] ✅ Đã tạo Agent document thành công:', agentDoc.$id);
+            } catch (agentError: any) {
+                console.error('[createUser] ❌ LỖI khi tạo Agent document:', agentError);
+                console.error('[createUser] Error message:', agentError.message);
+                console.error('[createUser] Error code:', agentError.code);
+                console.error('[createUser] Error type:', agentError.type);
+                console.error('[createUser] Full error:', JSON.stringify(agentError, null, 2));
+                
+                // QUAN TRỌNG: Throw error để biết lỗi gì
+                throw new Error(`Không thể tạo Agent document: ${agentError.message}`);
+            }
+        }
+
         return profile;
     } catch (error: any) {
         console.error("Lỗi khi tạo document profile:", error);
