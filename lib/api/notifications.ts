@@ -8,13 +8,15 @@ export type NotificationType =
     | 'property_status_updated'   // Cập nhật trạng thái bài đăng
     | 'credits_topup'             // Nạp điểm
     | 'broker_assigned'           // Môi giới tiếp nhận bài đăng
-    | 'property_available';        // Bài đăng mới cho môi giới
+    | 'property_available'        // Bài đăng mới cho môi giới
+    | 'new_message';              // Tin nhắn mới
 
 export interface CreateNotificationParams {
     userId: string;
     message: string;
     type: NotificationType;
     relatedPropertyId?: string;
+    relatedChatId?: string;
 }
 
 /**
@@ -23,8 +25,9 @@ export interface CreateNotificationParams {
 export async function createNotification({ 
     userId, 
     message, 
-    type, 
-    relatedPropertyId 
+    type,
+    relatedPropertyId,
+    relatedChatId
 }: CreateNotificationParams) {
     try {
         const notification = await databases.createDocument(
@@ -37,6 +40,7 @@ export async function createNotification({
                 type,
                 isRead: false,
                 relatedPropertyId: relatedPropertyId || null,
+                relatedChatId: relatedChatId || null,
             }
         );
         return notification;

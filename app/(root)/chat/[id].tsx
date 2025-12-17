@@ -1,14 +1,19 @@
-import React, { useEffect, useState, useRef } from 'react';
-import {
-    View, Text, FlatList, TextInput, TouchableOpacity, Image,
-    KeyboardAvoidingView, Platform, ActivityIndicator, Alert
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; //
-import { useLocalSearchParams, router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useGlobalContext } from '@/lib/global-provider';
 import { getMessages, sendMessage } from '@/lib/api/chat';
 import { client, config, databases } from '@/lib/appwrite';
+import { useGlobalContext } from '@/lib/global-provider';
+import { Ionicons } from '@expo/vector-icons';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator, Alert,
+    FlatList,
+    Image,
+    KeyboardAvoidingView, Platform,
+    Text,
+    TextInput, TouchableOpacity,
+    View
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; //
 
 const ChatRoomScreen = () => {
     const { id: chatId, otherUserId, otherUserName, otherUserAvatar } = useLocalSearchParams<{
@@ -74,7 +79,8 @@ const ChatRoomScreen = () => {
         const content = inputText.trim();
         setInputText('');
         try {
-            await sendMessage(chatId, user.$id, receiverId, content);
+            // Gửi tin nhắn kèm tên người gửi để tạo thông báo
+            await sendMessage(chatId, user.$id, receiverId, content, 'text', user.name);
         } catch (error: any) {
             console.error("Gửi lỗi:", error);
             Alert.alert("Gửi thất bại", error.message);
