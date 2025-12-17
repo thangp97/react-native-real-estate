@@ -4,6 +4,7 @@ import { getOrCreateChat } from '@/lib/api/chat';
 import { useGlobalContext } from '@/lib/global-provider';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker'; // Import DateTimePicker
+import { Audio, ResizeMode, Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -59,6 +60,10 @@ const ReviewPropertyDetailScreen = () => {
     // Image Upload States
     const [newImages, setNewImages] = useState<ImagePicker.ImagePickerAsset[]>([]);
     const [isUploading, setIsUploading] = useState(false);
+
+    // Video States
+    const [newVideo, setNewVideo] = useState<ImagePicker.ImagePickerAsset | null>(null);
+    const [isUploadingVideo, setIsUploadingVideo] = useState(false);
 
     // Form States
     const [form, setForm] = useState({
@@ -253,6 +258,22 @@ const ReviewPropertyDetailScreen = () => {
         }
     };
 
+    // Configure audio mode for video playback
+    useEffect(() => {
+        const configureAudio = async () => {
+            try {
+                await Audio.setAudioModeAsync({
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: false,
+                    shouldDuckAndroid: true,
+                });
+            } catch (error) {
+                console.warn('Error setting audio mode:', error);
+            }
+        };
+        configureAudio();
+    }, []);
+
     useEffect(() => {
         fetchData();
     }, [id]);
@@ -283,6 +304,27 @@ const ReviewPropertyDetailScreen = () => {
         }
     };
 
+    const pickVideo = async () => {
+        try {
+            let result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['videos'],
+                allowsMultipleSelection: false,
+                quality: 1,
+            });
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const video = result.assets[0];
+                // Kiểm tra kích thước video (giới hạn 50MB)
+                if (video.fileSize && video.fileSize > 50 * 1024 * 1024) {
+                    Alert.alert('Lỗi', 'Video phải nhỏ hơn 50MB. Vui lòng chọn video khác.');
+                    return;
+                }
+                setNewVideo(video);
+            }
+        } catch (error) {
+            Alert.alert("Thông báo", "Cần cấp quyền truy cập video.");
+        }
+    };
+
     const handleUploadImages = async () => {
         if (newImages.length === 0) return;
         if (!user) return;
@@ -305,6 +347,32 @@ const ReviewPropertyDetailScreen = () => {
         }
     };
 
+    const handleUploadVideo = async () => {
+        if (!newVideo || !user) return;
+        setIsUploadingVideo(true);
+        try {
+            // Upload video using same function as images (supports both)
+            const videoUrl = await uploadFieldImage(newVideo);
+            if (videoUrl) {
+                // Update property with video URL
+                const { databases, config } = await import('@/lib/appwrite');
+                await databases.updateDocument(
+                    config.databaseId!,
+                    'properties',
+                    id,
+                    { video: videoUrl }
+                );
+                Alert.alert("Thành công", "Đã lưu video thực địa.");
+                setNewVideo(null);
+                onRefresh();
+            }
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể tải video lên.");
+        } finally {
+            setIsUploadingVideo(false);
+        }
+    };
+
     const handleDecision = async (decision: 'approved' | 'rejected' | 'request_changes') => {
         if (!property) return;
         setIsSubmitting(true);
@@ -312,6 +380,11 @@ const ReviewPropertyDetailScreen = () => {
              const price = form.proposedPrice ? parseFloat(form.proposedPrice) : undefined;
              if (newImages.length > 0) {
                  Alert.alert("Lưu ý", "Bạn chưa lưu ảnh mới. Hãy ấn 'Lưu' trước khi duyệt.");
+                 setIsSubmitting(false);
+                 return;
+             }
+             if (newVideo) {
+                 Alert.alert("Lưu ý", "Bạn chưa lưu video mới. Hãy ấn 'Lưu video' trước khi duyệt.");
                  setIsSubmitting(false);
                  return;
              }
@@ -385,6 +458,69 @@ const ReviewPropertyDetailScreen = () => {
                     <TouchableOpacity onPress={handleUploadImages} disabled={isUploading} className="bg-blue-600 mx-4 mt-3 py-3 rounded-xl flex-row justify-center items-center shadow-md">
                         {isUploading ? <ActivityIndicator color="white" /> : <Ionicons name="cloud-upload-outline" size={20} color="white" />}
                         <Text className="text-white font-bold ml-2">{isUploading ? 'Đang tải lên...' : `Lưu ${newImages.length} ảnh mới`}</Text>
+                    </TouchableOpacity>
+                )}
+
+                {/* Video Section */}
+                {(property?.video || newVideo) && (
+                    <View className="bg-white p-4 mx-4 mt-3 rounded-xl shadow-sm">
+                        <View className="flex-row items-center justify-between mb-3">
+                            <Text className="text-base font-rubik-bold text-gray-800">🎥 Video giới thiệu</Text>
+                            {property?.video && !newVideo && (
+                                <TouchableOpacity onPress={pickVideo} className="bg-blue-50 px-3 py-1.5 rounded-lg">
+                                    <Text className="text-blue-600 text-xs font-bold">Đổi video</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                        <Video
+                            source={{ uri: newVideo?.uri || property.video }}
+                            useNativeControls
+                            resizeMode={ResizeMode.CONTAIN}
+                            isLooping={false}
+                            volume={1.0}
+                            isMuted={false}
+                            style={{
+                                width: '100%',
+                                height: 220,
+                                borderRadius: 12,
+                                backgroundColor: '#000',
+                            }}
+                        />
+                        {newVideo && (
+                            <View className="flex-row gap-2 mt-3">
+                                <TouchableOpacity 
+                                    onPress={handleUploadVideo} 
+                                    disabled={isUploadingVideo}
+                                    className="flex-1 bg-green-600 py-2.5 rounded-lg flex-row justify-center items-center"
+                                >
+                                    {isUploadingVideo ? (
+                                        <ActivityIndicator color="white" size="small" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="cloud-upload-outline" size={18} color="white" />
+                                            <Text className="text-white font-bold ml-2 text-sm">Lưu video</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    onPress={() => setNewVideo(null)}
+                                    className="bg-gray-200 px-4 py-2.5 rounded-lg"
+                                >
+                                    <Text className="text-gray-700 font-bold text-sm">Hủy</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                {/* Add Video Button if no video exists */}
+                {!property?.video && !newVideo && (
+                    <TouchableOpacity 
+                        onPress={pickVideo}
+                        className="bg-purple-50 mx-4 mt-3 py-3 rounded-xl flex-row justify-center items-center border border-purple-200"
+                    >
+                        <Ionicons name="videocam-outline" size={20} color="#9333ea" />
+                        <Text className="text-purple-600 font-bold ml-2">Thêm video thực địa</Text>
                     </TouchableOpacity>
                 )}
 

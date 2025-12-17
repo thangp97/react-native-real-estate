@@ -90,6 +90,7 @@ interface PropertyForm {
     bedrooms: string;
     bathrooms: string;
     photos: (ImagePickerAsset | { uri: string })[];
+    video: ImagePickerAsset | { uri: string } | null;
 }
 
 const CreateProperty = () => {
@@ -119,6 +120,7 @@ const CreateProperty = () => {
         bedrooms: '',
         bathrooms: '',
         photos: [],
+        video: null,
     });
 
     // Tính toán ngày hết hạn (15 ngày từ hôm nay)
@@ -154,6 +156,7 @@ const CreateProperty = () => {
                             bedrooms: property.bedrooms.toString(),
                             bathrooms: property.bathrooms.toString(),
                             photos: [{ uri: property.image }],
+                            video: property.video ? { uri: property.video } : null,
                         });
                     }
                 } catch {
@@ -182,6 +185,28 @@ const CreateProperty = () => {
         }
     };
 
+    const openVideoPicker = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Xin lỗi', 'Chúng tôi cần quyền truy cập thư viện để bạn có thể tải video lên.');
+            return;
+        }
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+            allowsMultipleSelection: false,
+            quality: 1,
+        });
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+            const video = result.assets[0];
+            // Kiểm tra kích thước video (giới hạn 50MB)
+            if (video.fileSize && video.fileSize > 50 * 1024 * 1024) {
+                Alert.alert('Lỗi', 'Video phải nhỏ hơn 50MB. Vui lòng chọn video khác.');
+                return;
+            }
+            setForm({ ...form, video });
+        }
+    };
+
     const uploadFile = async (file: ImagePickerAsset) => {
         if (!file || !file.mimeType || !file.fileSize) return null;
         const asset = { name: file.fileName || `${ID.unique()}.jpg`, type: file.mimeType, size: file.fileSize, uri: file.uri };
@@ -190,6 +215,23 @@ const CreateProperty = () => {
             return `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
         } catch (error) {
             console.error('Lỗi tải file:', error);
+            throw error;
+        }
+    };
+
+    const uploadVideo = async (file: ImagePickerAsset) => {
+        if (!file || !file.mimeType || !file.fileSize) return null;
+        const asset = { 
+            name: file.fileName || `${ID.unique()}.mp4`, 
+            type: file.mimeType, 
+            size: file.fileSize, 
+            uri: file.uri 
+        };
+        try {
+            const uploadedFile = await storage.createFile(config.storageId!, ID.unique(), asset);
+            return `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
+        } catch (error) {
+            console.error('Lỗi tải video:', error);
             throw error;
         }
     };
@@ -231,12 +273,33 @@ const CreateProperty = () => {
             if (isEditing) {
                 // Khi chỉnh sửa, không thay đổi status và expiresAt
                 const { status, expiresAt, ...updateData } = data;
+                
+                // Upload video nếu có video mới
+                if (form.video && 'mimeType' in form.video) {
+                    const videoUrl = await uploadVideo(form.video as ImagePickerAsset);
+                    if (videoUrl) {
+                        updateData.video = videoUrl;
+                    }
+                }
+                
                 await databases.updateDocument(config.databaseId!, 'properties', propertyId!, updateData);
                 Alert.alert('Thành công', 'Đã cập nhật bài đăng.');
             } else {
                 const coverImageUrl = await uploadFile(form.photos[0] as ImagePickerAsset);
                 if (!coverImageUrl) throw new Error("Không thể tải ảnh đại diện.");
-                const newProperty = await databases.createDocument(config.databaseId!, 'properties', ID.unique(), { ...data, image: coverImageUrl });
+                
+                // Upload video nếu có
+                let videoUrl = null;
+                if (form.video && 'mimeType' in form.video) {
+                    videoUrl = await uploadVideo(form.video as ImagePickerAsset);
+                }
+                
+                const propertyData = { ...data, image: coverImageUrl };
+                if (videoUrl) {
+                    propertyData.video = videoUrl;
+                }
+                
+                const newProperty = await databases.createDocument(config.databaseId!, 'properties', ID.unique(), propertyData);
                 const galleryPromises = form.photos.map(photo => uploadFile(photo as ImagePickerAsset).then(url => {
                     if (url) databases.createDocument(config.databaseId!, config.galleriesCollectionId!, ID.unique(), { propertyId: newProperty.$id, image: url, uploaderId: user!.$id });
                 }));
@@ -428,6 +491,24 @@ const CreateProperty = () => {
                         📸 Chọn ảnh {form.photos.length > 0 ? `(đã chọn ${form.photos.length})` : '(chưa có ảnh)'}
                     </Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity style={styles.pickerButton} onPress={openVideoPicker} activeOpacity={0.7}>
+                    <Text style={styles.pickerText}>
+                        🎥 Chọn video {form.video ? '(đã chọn video)' : '(tùy chọn - tối đa 50MB)'}
+                    </Text>
+                </TouchableOpacity>
+
+                {form.video && (
+                    <View style={styles.videoPreviewContainer}>
+                        <Text style={styles.videoPreviewText}>✅ Video đã chọn</Text>
+                        <TouchableOpacity 
+                            style={styles.removeVideoButton} 
+                            onPress={() => setForm({ ...form, video: null })}
+                        >
+                            <Text style={styles.removeVideoText}>Xóa</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 <View style={styles.submitButtonContainer}>
                     <TouchableOpacity 
@@ -767,6 +848,33 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#333',
+    },
+    videoPreviewContainer: {
+        backgroundColor: '#e7f3ff',
+        padding: 16,
+        borderRadius: 10,
+        marginBottom: 18,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#b3d9ff',
+    },
+    videoPreviewText: {
+        fontSize: 15,
+        color: '#004085',
+        fontWeight: '500',
+    },
+    removeVideoButton: {
+        backgroundColor: '#dc3545',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 6,
+    },
+    removeVideoText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
     },
 });
 
