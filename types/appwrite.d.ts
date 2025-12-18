@@ -16,6 +16,10 @@ declare module "react-native-appwrite" {
             email?: string;
             role?: string;
             credits?: number;
+            status?: string;
+            buyerName?: string;
+            buyerPhone?: string;
+            buyerIdentityCard?: string;
         }
     }
 }

@@ -1029,8 +1029,8 @@ const Property = () => {
                             {property?.price ? `${formatCurrency(property.price)} VNĐ` : ''}
                         </Text>
                     </View>
-                    {property?.status === 'sold' ? (
-                        (property.buyerId === user?.$id) ? (
+                    {property?.status === 'sold' || property?.status === 'deposit_paid' ? (
+                        (property.status === 'sold' && property.buyerId === user?.$id) ? (
                             hasReviewed ? (
                                 <View className="flex-1 flex flex-row items-center justify-center bg-gray-200 py-3 rounded-full flex-shrink">
                                     <Text className="text-gray-500 text-base text-center font-rubik-bold">
@@ -1048,9 +1048,12 @@ const Property = () => {
                                 </TouchableOpacity>
                             )
                         ) : (
-                            <View className="flex-1 flex-row items-center justify-center bg-gray-400 py-3 rounded-full flex-shrink">
+                            <View 
+                                style={{ backgroundColor: getStatusColor(property.status) }}
+                                className="flex-1 flex-row items-center justify-center py-3 rounded-full flex-shrink"
+                            >
                                 <Text className="text-white text-lg text-center font-rubik-bold">
-                                    Đã bán
+                                    {property.status === 'sold' ? 'Đã bán' : 'Đã đặt cọc'}
                                 </Text>
                             </View>
                         )

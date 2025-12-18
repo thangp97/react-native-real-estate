@@ -7,6 +7,7 @@ export async function getPropertiesByBrokerId(agentId: string) {
             config.databaseId!,
             config.propertiesCollectionId!,
             [
+                Query.equal('brokerId', agentId),
                 Query.or([
                     Query.equal('status', 'approved'),
                     Query.equal('status', 'deposit_paid'),
@@ -645,5 +646,45 @@ async function getUserProfile(profileId: string) {
     } catch {
         console.error("Không tìm thấy profile:", profileId);
         return { name: "Người dùng ẩn danh", avatar: null }; // Fallback
+    }
+}
+
+export async function getUserByPhone(phone: string) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            [Query.equal('phoneNumber', phone)] // Giả sử field trong profiles là 'phoneNumber'
+        );
+        if (result.total > 0) return result.documents[0];
+        return null;
+    } catch (error) {
+        console.error("Lỗi tìm user bằng số điện thoại:", error);
+        return null;
+    }
+}
+
+export async function updatePropertyStatus(
+    propertyId: string,
+    status: 'deposit_paid' | 'sold',
+    buyerId: string
+) {
+    try {
+        const payload: any = {
+            status: status,
+            buyerId: buyerId // Chỉ lưu ID người mua, thông tin chi tiết sẽ lấy từ collection users
+        };
+
+        const result = await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            payload
+        );
+
+        return result;
+    } catch (error) {
+        console.error("Lỗi cập nhật trạng thái BĐS:", error);
+        throw error;
     }
 }

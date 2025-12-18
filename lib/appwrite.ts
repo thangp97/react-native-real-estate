@@ -76,11 +76,8 @@ export async function createUser(email: string, password: string, username: stri
         };
 
         if (phoneNumber) {
-            if (role === 'broker' || role === 'seller') {
-                profileData.phoneNumber = phoneNumber;
-            } else {
-                console.warn(`[createUser] PhoneNumber không được lưu cho role ${role}.`);
-            }
+            // Lưu số điện thoại cho mọi role (bao gồm cả buyer)
+            profileData.phoneNumber = phoneNumber;
         }
 
         if (region) {

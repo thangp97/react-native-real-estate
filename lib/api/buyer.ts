@@ -74,11 +74,7 @@ export async function getSimilarProperties({ propertyId, type }: any) {
         const buildQuery = [
             Query.equal('type', type),
             Query.notEqual('$id', propertyId),
-            Query.or([
-                Query.equal('status', 'approved'),
-                Query.equal('status', 'deposit_paid'),
-                Query.equal('status', 'sold')
-            ]),
+            Query.equal('status', 'approved'),
             Query.limit(5),
             Query.orderDesc('$createdAt')
         ];
