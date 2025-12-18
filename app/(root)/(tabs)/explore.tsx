@@ -11,7 +11,8 @@ import {
     Keyboard,
     ScrollView,
     Platform,
-    KeyboardAvoidingView
+    KeyboardAvoidingView,
+    Alert
 } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,13 +21,15 @@ import Search from "@/components/Search";
 import { Card } from "@/components/Cards";
 import Filters from "@/components/Filters";
 import { useAppwrite } from "@/lib/useAppwrite";
-import { getProperties } from "@/lib/api/buyer";
+import { getProperties, togglePropertyFavorite } from "@/lib/api/buyer";
 import { useEffect, useState } from "react";
 import NoResults from "@/components/NoResults";
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { useFilterContext } from "@/lib/filter-provider";
+import { useGlobalContext } from "@/lib/global-provider";
 
 export default function Explore() {
+    const { user, refetch: refetchUser, setUser } = useGlobalContext();
     const { 
         minPrice, setMinPrice,
         maxPrice, setMaxPrice,
@@ -39,6 +42,7 @@ export default function Explore() {
     } = useFilterContext();
     
     const [modalVisible, setModalVisible] = useState(false);
+    const [togglingId, setTogglingId] = useState<string | null>(null);
     
     const [tempMinPrice, setTempMinPrice] = useState(minPrice);
     const [tempMaxPrice, setTempMaxPrice] = useState(maxPrice);
@@ -74,6 +78,46 @@ export default function Explore() {
     })
 
     const handleCardPress = (id: string) => router.push(`/properties/${id}`);
+
+    const handleToggleFavorite = async (propertyId: string) => {
+        if (!user) {
+            Alert.alert("Thông báo", "Vui lòng đăng nhập để lưu tin này.");
+            return;
+        }
+        if (togglingId === propertyId) return;
+
+        setTogglingId(propertyId);
+        try {
+            // Extract IDs if favorites are objects
+            const currentFavorites = (user.favorites || []).map((item: any) => 
+                typeof item === 'string' ? item : item.$id
+            );
+            
+            const newFavorites = await togglePropertyFavorite(user.$id, propertyId, currentFavorites);
+            
+            if (setUser) {
+                setUser({
+                    ...user,
+                    favorites: newFavorites
+                });
+            }
+            
+            // Optional: Show toast or small feedback
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể cập nhật danh sách yêu thích.");
+            console.error(error);
+        } finally {
+            setTogglingId(null);
+        }
+    };
+
+    const isFavorite = (propertyId: string) => {
+        if (!user?.favorites) return false;
+        return user.favorites.some((item: any) => {
+            const itemId = typeof item === 'string' ? item : item.$id;
+            return itemId === propertyId;
+        });
+    };
 
     useEffect(() => {
         refetch({
@@ -166,12 +210,21 @@ export default function Explore() {
 
             {viewMode === 'list' ? (
                 <FlatList 
+                    key="flatlist-1-column"
                     data={properties}
-                    renderItem={({ item }) => <Card item={item} onPress={() => handleCardPress(item.$id)} />}
+                    renderItem={({ item }) => (
+                        <View className="px-5 mb-6">
+                            <Card 
+                                item={item} 
+                                onPress={() => handleCardPress(item.$id)}
+                                onFavoritePress={() => handleToggleFavorite(item.$id)}
+                                isFavorite={isFavorite(item.$id)}
+                            />
+                        </View>
+                    )}
                     keyExtractor={(item) => item.$id}
-                    numColumns={2}
+                    numColumns={1}
                     contentContainerClassName="pb-32"
-                    columnWrapperClassName="flex gap-5 px-5"
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
                         loading ? (
