@@ -10,9 +10,11 @@ interface Props {
     onPress?: () => void;
 }
 
-export const FeaturedCard = ({item: {image, rating, name, address, price}, onPress}: Props) => {
+export const FeaturedCard = ({item: {image, rating, name, address, price, area}, onPress}: Props) => {
+    const pricePerMeter = area > 0 ? (price / area) : 0;
+
     return (
-        <TouchableOpacity onPress={onPress} className={"flex flex-col" +
+        <TouchableOpacity onPress={onPress} className={"flex flex-col " +
             "items-start w-60 h-80 relative"}>
             <Image source={{uri: image}} className={"size-full rounded-2xl"} />
             <Image source={images.cardGradient} className={"size-full rounded-2xl " +
@@ -21,11 +23,22 @@ export const FeaturedCard = ({item: {image, rating, name, address, price}, onPre
             <View className={"flex flex-col items-start absolute bottom-5 inset-x-5"}>
                 <Text className={"text-xl font-rubik-extrabold text-white"}
                       numberOfLines={1}>{name}</Text>
-                <Text className={"text-base font-rubik text-white"}>
+                <Text className={"text-base font-rubik text-white"} numberOfLines={1}>
                     {address}
                 </Text>
 
-                <View className={"flex flex-row items-center justify-between w-full"}>
+                <View className="flex flex-row items-center justify-between w-full mt-1">
+                    <View className="flex flex-row items-center">
+                        <Text className="text-white font-rubik-medium text-sm">{area} m²</Text>
+                        {pricePerMeter > 0 && (
+                            <Text className="text-white/80 font-rubik text-xs ml-2">
+                                • {formatCurrency(pricePerMeter)}/m²
+                            </Text>
+                        )}
+                    </View>
+                </View>
+
+                <View className={"flex flex-row items-center justify-between w-full mt-1"}>
                     <Text className={"text-xl font-rubik-extrabold text-white"}>
                         {formatCurrency(price)} VND
                     </Text>
@@ -37,9 +50,10 @@ export const FeaturedCard = ({item: {image, rating, name, address, price}, onPre
 }
 
 export const Card = ({ item, onPress }: Props) => {
-    const { image, name, address, price, status } = item;
+    const { image, name, address, price, status, area } = item;
     const formattedStatus = status ? formatStatus(status) : '';
     const statusColor = status ? getStatusColor(status) : '#777';
+    const pricePerMeter = area > 0 ? (price / area) : 0;
 
     return (
         <TouchableOpacity onPress={onPress}
@@ -62,11 +76,20 @@ export const Card = ({ item, onPress }: Props) => {
             <View className={"flex flex-col mt-2"}>
                 <Text className={"text-base font-rubik-bold text-black-300"}
                       numberOfLines={1}>{name}</Text>
-                <Text className={"text-xs font-rubik text-black-200"}>
+                <Text className={"text-xs font-rubik text-black-200"} numberOfLines={1}>
                     {address}
                 </Text>
 
-                <View className={"flex flex-row items-center justify-between mt-2"}>
+                <View className="flex flex-row items-center mt-1">
+                    <Text className="text-black-200 font-rubik-medium text-xs">{area} m²</Text>
+                    {pricePerMeter > 0 && (
+                        <Text className="text-black-100 font-rubik text-[10px] ml-2 italic">
+                            ({formatCurrency(pricePerMeter)}/m²)
+                        </Text>
+                    )}
+                </View>
+
+                <View className={"flex flex-row items-center justify-between mt-1"}>
                     <Text className={"text-base font-rubik-bold text-primary-300"}>
                         {formatCurrency(price)} VND
                     </Text>
