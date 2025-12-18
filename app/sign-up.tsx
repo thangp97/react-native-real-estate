@@ -1,5 +1,6 @@
 import { createUser } from '@/lib/appwrite';
 import { useGlobalContext } from '@/lib/global-provider';
+import * as ImagePicker from 'expo-image-picker';
 import { Link, Redirect, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -7,6 +8,7 @@ import {
     Alert,
     Button,
     FlatList,
+    Image,
     Modal,
     ScrollView,
     StyleSheet,
@@ -74,6 +76,7 @@ const SignUp = () => {
         role: 'buyer',
         region: undefined
     });
+    const [avatar, setAvatar] = useState<{ uri: string; type: string; name: string } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isPickerVisible, setIsPickerVisible] = useState(false);
     const router = useRouter();
@@ -81,6 +84,29 @@ const SignUp = () => {
     if (!loading && user) {
         return <Redirect href="/" />;
     }
+
+    const pickAvatar = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                const asset = result.assets[0];
+                setAvatar({
+                    uri: asset.uri,
+                    type: 'image/jpeg',
+                    name: `avatar_${Date.now()}.jpg`
+                });
+            }
+        } catch (error) {
+            console.error('Lỗi chọn ảnh:', error);
+            Alert.alert('Lỗi', 'Không thể chọn ảnh');
+        }
+    };
 
     const handleSignUp = async () => {
         if (!form.name || !form.email || !form.password || !form.phoneNumber) {
@@ -95,7 +121,7 @@ const SignUp = () => {
 
         setIsSubmitting(true);
         try {
-            await createUser(form.email, form.password, form.name, form.role, form.region, form.phoneNumber);
+            await createUser(form.email, form.password, form.name, form.role, form.region, form.phoneNumber, avatar);
 
             // Sau khi đăng ký thành công (đã tự động đăng nhập), refetch lại dữ liệu người dùng
             await refetch({});
@@ -133,6 +159,29 @@ const SignUp = () => {
                 <View>
                     <Text className="text-base text-gray-600 font-rubik-medium">Username</Text>
                     <TextInput placeholder="Username" value={form.name} onChangeText={(e) => setForm({...form, name: e})} style={styles.input} />
+                </View>
+
+                {/* Ảnh đại diện (tùy chọn) */}
+                <View style={{ marginBottom: 12 }}>
+                    <Text className="text-base text-gray-600 font-rubik-medium">Ảnh đại diện (không bắt buộc)</Text>
+                    {avatar ? (
+                        <View style={styles.avatarContainer}>
+                            <Image source={{ uri: avatar.uri }} style={styles.avatarPreview} />
+                            <TouchableOpacity 
+                                style={styles.removeAvatarButton}
+                                onPress={() => setAvatar(null)}
+                            >
+                                <Text style={styles.removeAvatarText}>✕</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <TouchableOpacity 
+                            style={styles.avatarPlaceholder}
+                            onPress={pickAvatar}
+                        >
+                            <Text style={styles.avatarPlaceholderText}>📷 Chọn ảnh đại diện</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
                 
                 <View>
@@ -224,6 +273,49 @@ const styles = StyleSheet.create({
     container: { flex: 1, padding: 20, backgroundColor: '#fff' },
     title: { fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 24, marginTop: 40 },
     input: { height: 50, borderColor: '#ccc', borderWidth: 1, marginBottom: 12, paddingHorizontal: 10, borderRadius: 8, justifyContent: 'center' },
+    avatarContainer: {
+        alignItems: 'center',
+        marginTop: 8,
+        position: 'relative',
+    },
+    avatarPreview: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 2,
+        borderColor: '#007BFF',
+    },
+    removeAvatarButton: {
+        position: 'absolute',
+        top: -5,
+        right: '35%',
+        backgroundColor: '#DC3545',
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    removeAvatarText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    avatarPlaceholder: {
+        height: 120,
+        borderColor: '#ccc',
+        borderWidth: 1,
+        borderRadius: 8,
+        borderStyle: 'dashed',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f9f9f9',
+        marginTop: 8,
+    },
+    avatarPlaceholderText: {
+        fontSize: 16,
+        color: '#666',
+    },
     roleLabel: { marginTop: 10, marginBottom: 5, fontSize: 16, fontWeight: '600', color: '#333' },
     roleContainer: { flexDirection: 'row', justifyContent: 'space-between' },
     roleButton: { flex: 1, padding: 10, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, alignItems: 'center', marginHorizontal: 4 },

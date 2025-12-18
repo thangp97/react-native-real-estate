@@ -31,7 +31,15 @@ export const avatar = new Avatars(client);
 export const databases = new Databases(client);
 export const storage = new Storage(client);
 
-export async function createUser(email: string, password: string, username: string, role: string, region?: string, phoneNumber?: string) {
+export async function createUser(
+    email: string, 
+    password: string, 
+    username: string, 
+    role: string, 
+    region?: string, 
+    phoneNumber?: string,
+    avatarFile?: { uri: string; type: string; name: string } | null
+) {
     let newAccount;
     try {
         newAccount = await account.create(ID.unique(), email, password, username);
@@ -57,6 +65,32 @@ export async function createUser(email: string, password: string, username: stri
         console.error("Lỗi khi tạo session sau khi đăng ký:", error);
     }
 
+    // Upload avatar nếu có
+    let avatarUrl: string | undefined = undefined;
+    if (avatarFile) {
+        try {
+            console.log('[createUser] Đang upload avatar...');
+            const file = {
+                name: avatarFile.name,
+                type: avatarFile.type,
+                size: 0, // Expo sẽ tự động xử lý
+                uri: avatarFile.uri,
+            };
+
+            const uploadedFile = await storage.createFile(
+                config.storageId!,
+                ID.unique(),
+                file as any
+            );
+
+            avatarUrl = `${config.endpoint}/storage/buckets/${config.storageId}/files/${uploadedFile.$id}/view?project=${config.projectId}`;
+            console.log('[createUser] ✅ Upload avatar thành công:', avatarUrl);
+        } catch (error) {
+            console.error('[createUser] ⚠️ Lỗi upload avatar:', error);
+            // Không throw error, chỉ log warning để vẫn tạo được tài khoản
+        }
+    }
+
     try {
         // Danh sách các giá trị region hợp lệ theo enum trong database
         const validRegions = [
@@ -74,6 +108,11 @@ export async function createUser(email: string, password: string, username: stri
             email: email,
             credits: 10, // **GÁN CREDITS MẶC ĐỊNH**
         };
+
+        // Thêm avatar nếu đã upload thành công
+        if (avatarUrl) {
+            profileData.avatar = avatarUrl;
+        }
 
         if (phoneNumber) {
             // Lưu số điện thoại cho mọi role (bao gồm cả buyer)
