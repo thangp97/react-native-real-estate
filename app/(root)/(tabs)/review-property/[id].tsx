@@ -4,9 +4,9 @@ import { getOrCreateChat } from '@/lib/api/chat';
 import { useGlobalContext } from '@/lib/global-provider';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker'; // Import DateTimePicker
-import { Audio, ResizeMode, Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -263,21 +263,20 @@ const ReviewPropertyDetailScreen = () => {
         }
     };
 
-    // Configure audio mode for video playback
+    // Setup video player
+    const videoPlayer = useVideoPlayer(newVideo?.uri || property?.video || '', player => {
+        player.loop = false;
+        player.muted = false;
+        player.volume = 1.0;
+    });
+
+    // Update video source when video changes
     useEffect(() => {
-        const configureAudio = async () => {
-            try {
-                await Audio.setAudioModeAsync({
-                    playsInSilentModeIOS: true,
-                    staysActiveInBackground: false,
-                    shouldDuckAndroid: true,
-                });
-            } catch (error) {
-                console.warn('Error setting audio mode:', error);
-            }
-        };
-        configureAudio();
-    }, []);
+        const videoSource = newVideo?.uri || property?.video;
+        if (videoSource && videoPlayer) {
+            videoPlayer.replace(videoSource);
+        }
+    }, [newVideo?.uri, property?.video]);
 
     useEffect(() => {
         fetchData();
@@ -553,33 +552,13 @@ const ReviewPropertyDetailScreen = () => {
                     {(property?.video || newVideo) ? (
                         <>
                             <View className="relative">
-                                <Video
+                                <VideoView
                                     key={`video-${newVideo?.uri || property.video}-${Date.now()}`}
-                                    source={{ uri: newVideo?.uri || property.video }}
-                                    useNativeControls
-                                    resizeMode={ResizeMode.COVER}
-                                    isLooping={false}
-                                    volume={1.0}
-                                    isMuted={false}
-                                    shouldPlay={false}
-                                    onLoadStart={() => {
-                                        console.log('[Video] Bắt đầu load video...');
-                                        setIsVideoLoading(true);
-                                    }}
-                                    onLoad={(data) => {
-                                        console.log('[Video] Video loaded successfully', data);
-                                        setIsVideoLoading(false);
-                                    }}
-                                    onError={(error) => {
-                                        console.error('[Video] Error loading video:', error);
-                                        setIsVideoLoading(false);
-                                        // Only show alert if not currently updating video
-                                        if (!isVideoUpdating) {
-                                            Alert.alert('Lỗi video', 'Không thể tải video. Vui lòng kiểm tra lại URL hoặc thử tải lại trang.');
-                                        }
-                                    }}
-                                    onReadyForDisplay={() => {
-                                        console.log('[Video] Video ready for display');
+                                    player={videoPlayer}
+                                    nativeControls
+                                    contentFit="cover"
+                                    onFirstFrameRender={() => {
+                                        console.log('[Video] First frame rendered');
                                         setIsVideoLoading(false);
                                     }}
                                     style={{

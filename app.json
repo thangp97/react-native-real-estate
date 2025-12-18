@@ -50,7 +50,8 @@
             "./assets/fonts/Rubik-Light.ttf"
           ]
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

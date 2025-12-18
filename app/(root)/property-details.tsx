@@ -1,5 +1,5 @@
-import { Audio, ResizeMode, Video } from 'expo-av';
 import { Link, router, useLocalSearchParams } from "expo-router";
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -127,21 +127,19 @@ const PropertyDetails = () => {
         ...(galleryImages?.map((g: any) => g.image) || [])
     ].filter(Boolean);
 
-    // Configure audio mode for video playback
+    // Create video player
+    const videoPlayer = useVideoPlayer(property?.video || '', player => {
+        player.loop = false;
+        player.muted = false;
+        player.volume = 1.0;
+    });
+
+    // Update video source when property changes
     useEffect(() => {
-        const configureAudio = async () => {
-            try {
-                await Audio.setAudioModeAsync({
-                    playsInSilentModeIOS: true,
-                    staysActiveInBackground: false,
-                    shouldDuckAndroid: true,
-                });
-            } catch (error) {
-                console.warn('Error setting audio mode:', error);
-            }
-        };
-        configureAudio();
-    }, []);
+        if (property?.video && videoPlayer) {
+            videoPlayer.replace(property.video);
+        }
+    }, [property?.video]);
 
     useEffect(() => {
         const fetchAgent = async () => {
@@ -234,10 +232,10 @@ const PropertyDetails = () => {
                 {property.video && (
                     <View style={{ paddingHorizontal: 20, marginTop: 28 }}>
                         <Text style={styles.sectionTitle}>🎥 Video giới thiệu</Text>
-                        <Video
-                            source={{ uri: property.video }}
-                            useNativeControls
-                            resizeMode={ResizeMode.CONTAIN}
+                        <VideoView
+                            player={videoPlayer}
+                            nativeControls
+                            contentFit="contain"
                             style={{
                                 width: '100%',
                                 height: 220,

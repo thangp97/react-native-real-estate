@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Audio, ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useVideoPlayer, VideoView } from 'expo-video';
 import {
     Alert,
     Button,
@@ -19,13 +19,13 @@ import {
 
 
 
+
     Text,
     TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
     View
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "@/components/Cards";
 import icons from "@/constants/icons";
@@ -42,7 +42,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getUserByEmail, markPropertyAsSold, updatePropertyPrice } from "@/lib/api/broker";
 import { checkReviewExists, createReview } from "@/lib/api/rating";
-import { formatStatus, getStatusColor, formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatStatus, getStatusColor } from "@/lib/utils";
 
 type PropertyStatus = 'pending_approval' | 'for_sale' | 'deposit_paid' | 'sold' | 'rejected' | 'expired' | 'approved' | 'available';
 
@@ -91,21 +91,19 @@ const Property = () => {
     const [priceReason, setPriceReason] = useState('');
     const [updatingPrice, setUpdatingPrice] = useState(false);
 
-    // Configure audio mode for video playback
+    // Setup video player
+    const videoPlayer = useVideoPlayer(property?.video || '', player => {
+        player.loop = false;
+        player.muted = false;
+        player.volume = 1.0;
+    });
+
+    // Update video source when property changes
     useEffect(() => {
-        const configureAudio = async () => {
-            try {
-                await Audio.setAudioModeAsync({
-                    playsInSilentModeIOS: true,
-                    staysActiveInBackground: false,
-                    shouldDuckAndroid: true,
-                });
-            } catch (error) {
-                console.warn('Error setting audio mode:', error);
-            }
-        };
-        configureAudio();
-    }, []);
+        if (property?.video && videoPlayer) {
+            videoPlayer.replace(property.video);
+        }
+    }, [property?.video]);
 
     const handleUpdatePrice = async () => {
         const price = parseInt(newPriceInput.replace(/\D/g, ''));
@@ -625,13 +623,10 @@ const Property = () => {
                         <Text className="text-xl font-rubik-bold text-black-300 mb-4">
                             🎥 Video giới thiệu
                         </Text>
-                        <Video
-                            source={{ uri: property.video }}
-                            useNativeControls
-                            resizeMode={ResizeMode.CONTAIN}
-                            isLooping={false}
-                            volume={1.0}
-                            isMuted={false}
+                        <VideoView
+                            player={videoPlayer}
+                            nativeControls
+                            contentFit="contain"
                             style={{
                                 width: '100%',
                                 height: 220,
