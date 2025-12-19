@@ -16,10 +16,6 @@ import {
     Share // Added Share
     ,
 
-
-
-
-
     Text,
     TextInput,
     TouchableOpacity,
