@@ -1,5 +1,5 @@
-import { databases, config, client } from "@/lib/appwrite";
-import { Query, ID } from "react-native-appwrite";
+import { config, databases } from "@/lib/appwrite";
+import { ID, Query } from "react-native-appwrite";
 
 // 1. Khởi tạo hoặc Lấy Chat ID giữa 2 người
 export async function getOrCreateChat(currentUserId: string, otherUserId: string) {
@@ -60,7 +60,7 @@ export async function getMessages(chatId: string) {
 }
 
 // 3. Gửi tin nhắn
-export async function sendMessage(chatId: string, senderId: string, receiverId: string, content: string, type: 'text' | 'image' = 'text') {
+export async function sendMessage(chatId: string, senderId: string, receiverId: string, content: string, type: 'text' | 'image' = 'text', senderName?: string) {
     try {
         // A. Tạo tin nhắn trong bảng messages
         const message = await databases.createDocument(
@@ -86,6 +86,28 @@ export async function sendMessage(chatId: string, senderId: string, receiverId: 
                 lastMessageAt: new Date().toISOString()
             }
         );
+
+        // C. Tạo thông báo cho người nhận
+        try {
+            const { createNotification } = await import('./notifications');
+            const messagePreview = type === 'image'
+                ? '📷 Đã gửi một hình ảnh'
+                : content.length > 50
+                    ? content.substring(0, 50) + '...'
+                    : content;
+
+            await createNotification({
+                userId: receiverId,
+                message: `${senderName || 'Người dùng'}: ${messagePreview}`,
+                type: 'new_message',
+                relatedChatId: chatId
+            });
+
+            console.log('[sendMessage] ✅ Đã gửi thông báo tin nhắn cho:', receiverId);
+        } catch (notifError) {
+            console.error('[sendMessage] ⚠️ Không thể gửi thông báo:', notifError);
+            // Không throw error để không ảnh hưởng đến việc gửi tin nhắn
+        }
 
         return message;
     } catch (error) {
@@ -144,5 +166,37 @@ export async function getMyChats(userId: string) {
     } catch (error) {
         console.error("Lỗi lấy inbox:", error);
         throw error; // Ném lỗi để UI xử lý (nếu có lỗi Permissions)
+    }
+}
+
+// 5. Đánh dấu tất cả tin nhắn trong chat là đã đọc
+export async function markChatMessagesAsRead(chatId: string, userId: string) {
+    try {
+        // Lấy tất cả tin nhắn chưa đọc trong chat mà người dùng hiện tại là người nhận
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.messagesCollectionId!,
+            [
+                Query.equal('chatId', chatId),
+                Query.equal('receiverId', userId),
+                Query.equal('isRead', false)
+            ]
+        );
+
+        // Đánh dấu từng tin nhắn là đã đọc
+        const updatePromises = result.documents.map(message =>
+            databases.updateDocument(
+                config.databaseId!,
+                config.messagesCollectionId!,
+                message.$id,
+                { isRead: true }
+            )
+        );
+
+        await Promise.all(updatePromises);
+        console.log(`[markChatMessagesAsRead] Đã đánh dấu ${result.documents.length} tin nhắn là đã đọc`);
+    } catch (error) {
+        console.error("Lỗi đánh dấu tin nhắn đã đọc:", error);
+        throw error;
     }
 }

@@ -119,7 +119,11 @@ const ReviewPropertyDetailScreen = () => {
                     id: chatDoc.$id,
                     otherUserId: sellerData.$id,
                     otherUserName: sellerData.name || 'Người bán',
-                    otherUserAvatar: sellerData.avatar
+                    otherUserAvatar: sellerData.avatar,
+
+                    contextPropertyName: property.name,         // Tên căn nhà
+                    contextPropertyPrice: property.price,       // Giá căn nhà
+                    contextPropertyImage: property.image,       // URL ảnh thumbnail của nhà
                 }
             });
         } catch (error) {

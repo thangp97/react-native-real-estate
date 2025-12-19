@@ -7,6 +7,7 @@ export async function getPropertiesByBrokerId(agentId: string) {
             config.databaseId!,
             config.propertiesCollectionId!,
             [
+                Query.equal('brokerId', agentId),
                 Query.or([
                     Query.equal('status', 'approved'),
                     Query.equal('status', 'deposit_paid'),
@@ -25,14 +26,14 @@ export async function getPropertiesByBrokerId(agentId: string) {
 
 export async function getAgentById({ agentId }: { agentId: string }) {
     if (!agentId) return null;
-    
+
     // Validate agentId format
     const trimmedId = typeof agentId === 'string' ? agentId.trim() : '';
     if (!trimmedId || trimmedId.length > 36 || !/^[a-zA-Z0-9_]+$/.test(trimmedId) || trimmedId.startsWith('_')) {
         console.warn("ID môi giới không hợp lệ:", agentId);
         return null;
     }
-    
+
     try {
         return await databases.getDocument(config.databaseId!, config.profilesCollectionId!, trimmedId);
     } catch (error) {
@@ -78,11 +79,18 @@ export async function getBrokerStats(userId: string, region?: string) {
                 ]
             );
 
+            // 4. Lấy thông tin Broker để hiển thị Rating thật
+            const brokerProfile = await databases.getDocument(
+                config.databaseId!,
+                config.profilesCollectionId!,
+                userId
+            );
+
             return {
                 pendingCount: pendingDocs.total,
                 myActiveCount: myActiveDocs.total,
                 mySoldCount: mySoldDocs.total,
-                rating: 4.8,
+                rating: brokerProfile.rating,
             };
 
         } catch (error) {
@@ -158,7 +166,7 @@ export async function assignPropertyToBroker(propertyId: string, brokerId: strin
             const { createNotification } = await import('./notifications');
             const sellerId = typeof property.seller === 'string' ? property.seller : property.seller?.$id;
             const propertyName = property.name || 'Bất động sản';
-            
+
             if (sellerId) {
                 // Lấy tên broker
                 const brokerProfile = await databases.getDocument(
@@ -167,7 +175,7 @@ export async function assignPropertyToBroker(propertyId: string, brokerId: strin
                     brokerId
                 );
                 const brokerName = brokerProfile?.name || 'Môi giới';
-                
+
                 await createNotification({
                     userId: sellerId,
                     message: `Môi giới ${brokerName} đã tiếp nhận bài đăng "${propertyName}" của bạn`,
@@ -228,7 +236,7 @@ export async function finalizeVerification(
             const { createNotification } = await import('./notifications');
             const sellerId = typeof property.seller === 'string' ? property.seller : property.seller?.$id;
             const propertyName = property.name || 'Bất động sản';
-            
+
             if (sellerId) {
                 let statusMessage = '';
                 switch (decision) {
@@ -242,7 +250,7 @@ export async function finalizeVerification(
                         statusMessage = `Bài đăng "${propertyName}" của bạn cần chỉnh sửa`;
                         break;
                 }
-                
+
                 await createNotification({
                     userId: sellerId,
                     message: statusMessage,
@@ -332,7 +340,7 @@ export async function markPropertyAsSold(propertyId: string, buyerId: string) {
 export async function getAllPendingProperties(region: string) {
     try {
         if (!region) return [];
-        
+
         const result = await databases.listDocuments(
             config.databaseId!,
             config.propertiesCollectionId!,
@@ -393,7 +401,7 @@ export async function getBrokerBookings(brokerId: string) {
                         booking.property = fullProperty;
                     }
                 }
-                
+
                 // 4. Enrich thông tin user (có thể là buyer hoặc seller)
                 if (booking.user && typeof booking.user === 'string') {
                     try {
@@ -441,7 +449,7 @@ export async function confirmBooking(bookingId: string) {
             const { createNotification } = await import('./notifications');
             const userId = typeof booking.user === 'string' ? booking.user : booking.user?.$id;
             const propertyId = typeof booking.property === 'string' ? booking.property : booking.property?.$id;
-            
+
             if (userId && propertyId) {
                 const property = await databases.getDocument(
                     config.databaseId!,
@@ -456,7 +464,7 @@ export async function confirmBooking(bookingId: string) {
                     hour: '2-digit',
                     minute: '2-digit'
                 });
-                
+
                 await createNotification({
                     userId,
                     message: `Lịch hẹn xem "${propertyName}" vào ${formattedDate} đã được chấp nhận`,
@@ -499,7 +507,7 @@ export async function rejectBooking(bookingId: string) {
             const { createNotification } = await import('./notifications');
             const userId = typeof booking.user === 'string' ? booking.user : booking.user?.$id;
             const propertyId = typeof booking.property === 'string' ? booking.property : booking.property?.$id;
-            
+
             if (userId && propertyId) {
                 const property = await databases.getDocument(
                     config.databaseId!,
@@ -514,7 +522,7 @@ export async function rejectBooking(bookingId: string) {
                     hour: '2-digit',
                     minute: '2-digit'
                 });
-                
+
                 await createNotification({
                     userId,
                     message: `Lịch hẹn xem "${propertyName}" vào ${formattedDate} đã bị từ chối`,
@@ -645,5 +653,45 @@ async function getUserProfile(profileId: string) {
     } catch {
         console.error("Không tìm thấy profile:", profileId);
         return { name: "Người dùng ẩn danh", avatar: null }; // Fallback
+    }
+}
+
+export async function getUserByPhone(phone: string) {
+    try {
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.profilesCollectionId!,
+            [Query.equal('phoneNumber', phone)] // Giả sử field trong profiles là 'phoneNumber'
+        );
+        if (result.total > 0) return result.documents[0];
+        return null;
+    } catch (error) {
+        console.error("Lỗi tìm user bằng số điện thoại:", error);
+        return null;
+    }
+}
+
+export async function updatePropertyStatus(
+    propertyId: string,
+    status: 'deposit_paid' | 'sold',
+    buyerId: string
+) {
+    try {
+        const payload: any = {
+            status: status,
+            buyerId: buyerId // Chỉ lưu ID người mua, thông tin chi tiết sẽ lấy từ collection users
+        };
+
+        const result = await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            payload
+        );
+
+        return result;
+    } catch (error) {
+        console.error("Lỗi cập nhật trạng thái BĐS:", error);
+        throw error;
     }
 }
