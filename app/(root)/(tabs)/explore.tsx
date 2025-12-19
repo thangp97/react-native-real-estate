@@ -258,7 +258,7 @@ export default function Explore() {
                                             key={item.$id}
                                             coordinate={{ latitude: lat, longitude: lng }}
                                             title={item.name}
-                                            description={item.price ? `${item.price.toLocaleString()} VND` : ''}
+                                            description={item.price ? formatCurrency(item.price) : ''}
                                             onCalloutPress={() => handleCardPress(item.$id)}
                                         />
                                     )

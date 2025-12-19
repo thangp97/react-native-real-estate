@@ -30,13 +30,19 @@ export const getStatusColor = (status: string) => {
 
 export const formatCurrency = (amount: number): string => {
     if (!amount && amount !== 0) return '';
-    if (amount >= 1000000000) {
-        const ty = amount / 1000000000;
-        return `${ty % 1 === 0 ? ty : ty.toFixed(1)} tỷ`;
+    
+    const val = typeof amount === 'string' ? parseFloat(amount) : amount;
+    let result = '';
+
+    if (val >= 1000000000) {
+        const ty = val / 1000000000;
+        result = `${ty % 1 === 0 ? ty : ty.toFixed(2).replace(/\.?0+$/, '')} Tỷ`;
+    } else if (val >= 1000000) {
+        const trieu = val / 1000000;
+        result = `${trieu % 1 === 0 ? trieu : trieu.toFixed(2).replace(/\.?0+$/, '')} Triệu`;
+    } else {
+        result = val.toLocaleString('vi-VN');
     }
-    if (amount >= 1000000) {
-        const trieu = amount / 1000000;
-        return `${trieu % 1 === 0 ? trieu : trieu.toFixed(1)} triệu`;
-    }
-    return amount.toLocaleString('vi-VN');
+
+    return `${result} VNĐ`;
 };

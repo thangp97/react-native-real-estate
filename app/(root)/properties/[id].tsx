@@ -822,9 +822,10 @@ const Property = () => {
                                 contentContainerStyle={{ gap: 15 }}
                                 keyExtractor={(item) => item.$id}
                                 renderItem={({ item }) => (
-                                    <View style={{ width: 220 }}>
+                                    <View style={{ width: 240 }}>
                                         <Card 
                                             item={item} 
+                                            variant="small"
                                             onPress={() => router.push(`/properties/${item.$id}`)} 
                                         />
                                     </View>
@@ -1021,7 +1022,7 @@ const Property = () => {
                             numberOfLines={1}
                             className="text-primary-300 text-start text-xl font-rubik-bold"
                         >
-                            {property?.price ? `${formatCurrency(property.price)} VNĐ` : ''}
+                            {property?.price ? formatCurrency(property.price) : ''}
                         </Text>
                     </View>
                     {property?.status === 'sold' || property?.status === 'deposit_paid' ? (

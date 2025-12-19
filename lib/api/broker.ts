@@ -79,11 +79,18 @@ export async function getBrokerStats(userId: string, region?: string) {
                 ]
             );
 
+            // 4. Lấy thông tin Broker để hiển thị Rating thật
+            const brokerProfile = await databases.getDocument(
+                config.databaseId!,
+                config.profilesCollectionId!,
+                userId
+            );
+
             return {
                 pendingCount: pendingDocs.total,
                 myActiveCount: myActiveDocs.total,
                 mySoldCount: mySoldDocs.total,
-                rating: 4.8,
+                rating: brokerProfile.rating,
             };
 
         } catch (error) {

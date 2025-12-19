@@ -153,7 +153,9 @@ const BrokerDashboard = () => {
                         <View className="bg-yellow-50 w-10 h-10 rounded-full justify-center items-center mb-2">
                             <Ionicons name="star" size={20} color="#F59E0B" />
                         </View>
-                        <Text className="text-2xl font-rubik-bold text-black-300">{stats.rating}</Text>
+                        <Text className={`${stats.rating ? 'text-2xl' : 'text-lg'} font-rubik-bold text-black-300`}>
+                            {stats.rating ? stats.rating : 'Chưa có'}
+                        </Text>
                         <Text className="text-xs font-rubik text-gray-500">Điểm tín nhiệm</Text>
                     </View>
                 </View>
