@@ -695,3 +695,248 @@ export async function updatePropertyStatus(
         throw error;
     }
 }
+
+/**
+ * BIDDING SYSTEM - Môi giới bấm nhận duyệt tin trong thời gian bidding
+ */
+export async function submitBid(propertyId: string, brokerId: string) {
+    try {
+        // 1. Lấy thông tin property hiện tại
+        const property = await databases.getDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId
+        );
+
+        // 2. Kiểm tra deadline
+        if (!property.biddingDeadline) {
+            throw new Error("Tin đăng này không trong thời gian đấu giá");
+        }
+
+        const deadline = new Date(property.biddingDeadline);
+        const now = new Date();
+        
+        if (now > deadline) {
+            throw new Error("Đã hết thời gian nhận tin");
+        }
+
+        // 3. Kiểm tra đã submit chưa
+        const currentBidders = property.biddingBrokers || [];
+        if (currentBidders.includes(brokerId)) {
+            throw new Error("Bạn đã đăng ký nhận tin này rồi");
+        }
+
+        // 4. Thêm broker vào danh sách
+        const updatedBidders = [...currentBidders, brokerId];
+        
+        await databases.updateDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId,
+            {
+                biddingBrokers: updatedBidders,
+                biddingStatus: 'open'
+            }
+        );
+
+        console.log(`✅ Broker ${brokerId} đã đăng ký nhận tin ${propertyId}`);
+        return { success: true };
+    } catch (error: any) {
+        console.error("Lỗi submit bid:", error);
+        throw error;
+    }
+}
+
+/**
+ * BIDDING SYSTEM - Xử lý sau khi hết deadline
+ * Logic:
+ * - Nếu 0 người: chuyển về normal (available)
+ * - Nếu 1 người: assign luôn
+ * - Nếu >= 2 người: random chọn 1 người
+ */
+export async function processExpiredBidding(propertyId: string) {
+    try {
+        const property = await databases.getDocument(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            propertyId
+        );
+
+        const bidders = property.biddingBrokers || [];
+        const biddersCount = bidders.length;
+
+        console.log(`🔄 Xử lý bidding cho property ${propertyId}, có ${biddersCount} môi giới`);
+
+        if (biddersCount === 0) {
+            // Không có ai nhận -> chuyển về normal
+            await databases.updateDocument(
+                config.databaseId!,
+                config.propertiesCollectionId!,
+                propertyId,
+                {
+                    biddingStatus: 'normal',
+                    biddingDeadline: null,
+                    biddingBrokers: []
+                }
+            );
+            console.log('📢 Không có môi giới nào nhận, chuyển về chế độ thường');
+            
+            // Thông báo cho seller
+            try {
+                const { createNotification } = await import('./notifications');
+                const sellerId = typeof property.seller === 'string' ? property.seller : property.seller?.$id;
+                if (sellerId) {
+                    await createNotification({
+                        userId: sellerId,
+                        message: `Không có môi giới nào nhận tin "${property.name}". Tin đăng chuyển về chế độ thường.`,
+                        type: 'bidding_no_bidders',
+                        relatedPropertyId: propertyId
+                    });
+                }
+            } catch (notifError) {
+                console.warn("Không thể tạo thông báo:", notifError);
+            }
+            
+        } else if (biddersCount === 1) {
+            // 1 người -> assign luôn
+            const selectedBroker = bidders[0];
+            await assignPropertyToBroker(propertyId, selectedBroker);
+            
+            await databases.updateDocument(
+                config.databaseId!,
+                config.propertiesCollectionId!,
+                propertyId,
+                {
+                    biddingStatus: 'assigned',
+                    selectedBroker: selectedBroker
+                }
+            );
+            
+            console.log(`✅ Chỉ có 1 môi giới, tự động assign cho ${selectedBroker}`);
+            
+            // Thông báo cho broker được chọn
+            try {
+                const { createNotification } = await import('./notifications');
+                await createNotification({
+                    userId: selectedBroker,
+                    message: `Chúc mừng! Bạn đã được chọn để quản lý tin "${property.name}"`,
+                    type: 'bidding_winner',
+                    relatedPropertyId: propertyId
+                });
+            } catch (notifError) {
+                console.warn("Không thể tạo thông báo:", notifError);
+            }
+            
+        } else {
+            // >= 2 người -> random
+            const randomIndex = Math.floor(Math.random() * biddersCount);
+            const selectedBroker = bidders[randomIndex];
+            
+            await assignPropertyToBroker(propertyId, selectedBroker);
+            
+            await databases.updateDocument(
+                config.databaseId!,
+                config.propertiesCollectionId!,
+                propertyId,
+                {
+                    biddingStatus: 'assigned',
+                    selectedBroker: selectedBroker
+                }
+            );
+            
+            console.log(`🎲 Bốc thăm ngẫu nhiên, chọn môi giới ${selectedBroker} trong ${biddersCount} người`);
+            
+            // Thông báo cho broker được chọn
+            try {
+                const { createNotification } = await import('./notifications');
+                await createNotification({
+                    userId: selectedBroker,
+                    message: `Chúc mừng! Bạn đã được chọn (qua bốc thăm) để quản lý tin "${property.name}"`,
+                    type: 'bidding_winner',
+                    relatedPropertyId: propertyId
+                });
+                
+                // Thông báo cho các broker không được chọn
+                for (const bidderId of bidders) {
+                    if (bidderId !== selectedBroker) {
+                        await createNotification({
+                            userId: bidderId,
+                            message: `Rất tiếc, bạn không được chọn cho tin "${property.name}"`,
+                            type: 'bidding_loser',
+                            relatedPropertyId: propertyId
+                        });
+                    }
+                }
+            } catch (notifError) {
+                console.warn("Không thể tạo thông báo:", notifError);
+            }
+        }
+
+        return { success: true, biddersCount, selectedBroker: biddersCount > 0 ? property.selectedBroker : null };
+    } catch (error: any) {
+        console.error("Lỗi xử lý bidding:", error);
+        throw error;
+    }
+}
+
+/**
+ * BIDDING SYSTEM - Kiểm tra và xử lý tất cả các tin hết hạn bidding
+ * Chạy định kỳ (có thể từ app hoặc background job)
+ */
+export async function checkAndProcessAllExpiredBiddings() {
+    try {
+        const now = new Date();
+        
+        // Lấy tất cả properties có bidding đang mở và đã hết hạn
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [
+                Query.equal('biddingStatus', 'open'),
+                Query.lessThan('biddingDeadline', now.toISOString()),
+                Query.limit(100)
+            ]
+        );
+
+        console.log(`🔍 Tìm thấy ${result.total} tin đã hết hạn bidding`);
+
+        for (const property of result.documents) {
+            try {
+                await processExpiredBidding(property.$id);
+            } catch (error) {
+                console.error(`Lỗi xử lý property ${property.$id}:`, error);
+            }
+        }
+
+        return { processed: result.total };
+    } catch (error) {
+        console.error("Lỗi kiểm tra bidding:", error);
+        return { processed: 0 };
+    }
+}
+
+/**
+ * Lấy danh sách properties đang trong thời gian bidding theo region
+ */
+export async function getBiddingProperties(region: string) {
+    try {
+        const now = new Date();
+        
+        const result = await databases.listDocuments(
+            config.databaseId!,
+            config.propertiesCollectionId!,
+            [
+                Query.equal('biddingStatus', 'open'),
+                Query.equal('region', region),
+                Query.greaterThan('biddingDeadline', now.toISOString()),
+                Query.orderDesc('$createdAt'),
+                Query.limit(50)
+            ]
+        );
+
+        return result.documents;
+    } catch (error) {
+        console.error("Lỗi lấy danh sách bidding:", error);
+        return [];
+    }
+}

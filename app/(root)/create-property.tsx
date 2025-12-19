@@ -91,6 +91,8 @@ interface PropertyForm {
     bathrooms: number;
     photos: (ImagePickerAsset | { uri: string })[];
     video: ImagePickerAsset | { uri: string } | null;
+    enableBidding: boolean; // Bật tính năng đấu giá môi giới
+    biddingMinutes: number; // Số phút cho môi giới đăng ký nhận tin
 }
 
 const CreateProperty = () => {
@@ -123,6 +125,8 @@ const CreateProperty = () => {
         bathrooms: 0,
         photos: [],
         video: null,
+        enableBidding: false,
+        biddingMinutes: 1440, // 24 giờ = 1440 phút
     });
 
     // Tính toán ngày hết hạn (15 ngày từ hôm nay)
@@ -268,6 +272,17 @@ const CreateProperty = () => {
                 status: 'available', // Bài đăng mới luôn có status là 'available' để môi giới có thể nhận
                 expiresAt: expiresAt.toISOString(),
             };
+
+            // Thêm bidding system nếu được bật
+            if (form.enableBidding && !isEditing) {
+                const biddingDeadline = new Date();
+                biddingDeadline.setMinutes(biddingDeadline.getMinutes() + form.biddingMinutes);
+                
+                data.biddingDeadline = biddingDeadline.toISOString();
+                data.biddingBrokers = [];
+                data.biddingStatus = 'open';
+                data.selectedBroker = null;
+            }
 
             // Chỉ thêm các trường này nếu là loại hình nhà
             if (isHouseType) {
@@ -920,6 +935,70 @@ Chỉ trả về mô tả, không giải thích.`;
                     </View>
                 )}
 
+                {/* Bidding System Settings - Chỉ hiển thị khi tạo mới */}
+                {!isEditing && (
+                    <View style={styles.biddingSection}>
+                        <View style={styles.biddingSectionHeader}>
+                            <Text style={styles.biddingSectionTitle}>🎲 Hệ thống đấu giá môi giới</Text>
+                            <TouchableOpacity 
+                                style={[styles.biddingToggle, form.enableBidding && styles.biddingToggleActive]}
+                                onPress={() => setForm({ ...form, enableBidding: !form.enableBidding })}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={[styles.biddingToggleText, form.enableBidding && styles.biddingToggleTextActive]}>
+                                    {form.enableBidding ? 'BẬT' : 'TẮT'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {form.enableBidding && (
+                            <View style={styles.biddingOptions}>
+                                <Text style={styles.biddingDescription}>
+                                    Cho phép nhiều môi giới đăng ký nhận tin trong khoảng thời gian bạn chọn. 
+                                    Sau khi hết thời gian, hệ thống sẽ tự động chọn môi giới phù hợp.
+                                </Text>
+                                
+                                <Text style={styles.biddingLabel}>Thời gian chờ môi giới đăng ký:</Text>
+                                <View style={styles.biddingHoursContainer}>
+                                    {[
+                                        { value: 5, label: '5 phút' },
+                                        { value: 10, label: '10 phút' },
+                                        { value: 360, label: '6 giờ' },
+                                        { value: 720, label: '12 giờ' },
+                                        { value: 1440, label: '24 giờ' },
+                                        { value: 2880, label: '48 giờ' },
+                                        { value: 4320, label: '72 giờ' },
+                                    ].map((option) => (
+                                        <TouchableOpacity
+                                            key={option.value}
+                                            style={[
+                                                styles.biddingHourButton,
+                                                form.biddingMinutes === option.value && styles.biddingHourButtonActive
+                                            ]}
+                                            onPress={() => setForm({ ...form, biddingMinutes: option.value })}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={[
+                                                styles.biddingHourText,
+                                                form.biddingMinutes === option.value && styles.biddingHourTextActive
+                                            ]}>
+                                                {option.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+
+                                <View style={styles.biddingInfoBox}>
+                                    <Text style={styles.biddingInfoTitle}>📋 Quy tắc đấu giá:</Text>
+                                    <Text style={styles.biddingInfoText}>• Nếu có 1 môi giới: Tự động nhận tin</Text>
+                                    <Text style={styles.biddingInfoText}>• Nếu có 2+ môi giới: Bốc thăm ngẫu nhiên</Text>
+                                    <Text style={styles.biddingInfoText}>• Nếu không có ai: Chuyển về chế độ thường</Text>
+                                </View>
+                            </View>
+                        )}
+                    </View>
+                )}
+
                 <View style={styles.submitButtonContainer}>
                     <TouchableOpacity 
                         style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]} 
@@ -1329,6 +1408,111 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 2,
         elevation: 1,
+    },
+    // Bidding System Styles
+    biddingSection: {
+        backgroundColor: '#f8f9fa',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 20,
+        borderWidth: 1.5,
+        borderColor: '#9c27b0',
+    },
+    biddingSectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    biddingSectionTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
+        flex: 1,
+    },
+    biddingToggle: {
+        backgroundColor: '#e0e0e0',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        minWidth: 60,
+    },
+    biddingToggleActive: {
+        backgroundColor: '#9c27b0',
+    },
+    biddingToggleText: {
+        color: '#666',
+        fontWeight: 'bold',
+        fontSize: 14,
+        textAlign: 'center',
+    },
+    biddingToggleTextActive: {
+        color: '#fff',
+    },
+    biddingOptions: {
+        marginTop: 12,
+    },
+    biddingDescription: {
+        fontSize: 14,
+        color: '#555',
+        lineHeight: 20,
+        marginBottom: 16,
+        backgroundColor: '#fff',
+        padding: 12,
+        borderRadius: 8,
+    },
+    biddingLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 8,
+    },
+    biddingHoursContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 16,
+    },
+    biddingHourButton: {
+        backgroundColor: '#fff',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        borderWidth: 1.5,
+        borderColor: '#e0e0e0',
+        minWidth: 80,
+    },
+    biddingHourButtonActive: {
+        backgroundColor: '#9c27b0',
+        borderColor: '#9c27b0',
+    },
+    biddingHourText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#666',
+    },
+    biddingHourTextActive: {
+        color: '#fff',
+    },
+    biddingInfoBox: {
+        backgroundColor: '#fff',
+        padding: 12,
+        borderRadius: 8,
+        borderLeftWidth: 4,
+        borderLeftColor: '#9c27b0',
+    },
+    biddingInfoTitle: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 8,
+    },
+    biddingInfoText: {
+        fontSize: 13,
+        color: '#555',
+        lineHeight: 20,
+        marginBottom: 4,
     },
     counterButton: {
         width: 44,

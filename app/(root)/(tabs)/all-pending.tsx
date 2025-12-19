@@ -54,11 +54,36 @@ const AllPendingScreen = () => {
     const handlePickTask = async (propertyId: string) => {
         if (!user) return;
         try {
+            // Kiểm tra xem property có đang trong chế độ bidding không
+            const property = properties.find(p => p.$id === propertyId);
+            
+            if (property && property.biddingStatus === 'open' && property.biddingDeadline) {
+                const deadline = new Date(property.biddingDeadline);
+                const now = new Date();
+                
+                if (now < deadline) {
+                    // Đang trong thời gian bidding -> submit bid
+                    const { submitBid } = await import('@/lib/api/broker');
+                    await submitBid(propertyId, user.$id);
+                    
+                    Alert.alert(
+                        "Đã đăng ký!", 
+                        "Bạn đã đăng ký nhận tin này. Hệ thống sẽ chọn môi giới sau khi hết thời hạn.",
+                        [{ text: "OK" }]
+                    );
+                    
+                    // Refresh để cập nhật UI
+                    await fetchData();
+                    return;
+                }
+            }
+            
+            // Nếu không có bidding hoặc đã hết hạn bidding -> assign trực tiếp
             await assignPropertyToBroker(propertyId, user.$id);
             Alert.alert("Thành công", "Đã nhận tin! Tin đã được chuyển sang tab Đang quản lý.");
             setProperties(prev => prev.filter(item => item.$id !== propertyId));
         } catch (error: any) {
-            Alert.alert("Lỗi", "Không thể nhận tin này.");
+            Alert.alert("Lỗi", error.message || "Không thể nhận tin này.");
             await fetchData();
         }
     };
@@ -71,49 +96,81 @@ const AllPendingScreen = () => {
         return name.includes(query) || address.includes(query);
     });
 
-    const renderItem = ({ item }: { item: any }) => (
-        <View className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 mb-4 mx-1">
-            <View className="flex-row">
-                <Image
-                    source={{ uri: item.image || 'https://via.placeholder.com/150' }}
-                    className="w-28 h-28 rounded-xl bg-gray-200"
-                    resizeMode="cover"
-                />
-                <View className="flex-1 ml-3 justify-between py-1">
-                    <View>
-                        <View className="flex-row justify-between items-start mb-1">
-                            <View className="bg-red-50 px-2 py-1 rounded-md border border-red-100">
-                                <Text className="text-[10px] font-bold text-red-500 uppercase">Chờ duyệt</Text>
+    const renderItem = ({ item }: { item: any }) => {
+        const isBidding = item.biddingStatus === 'open' && item.biddingDeadline;
+        const isAlreadyBid = item.biddingBrokers?.includes(user?.$id);
+        const deadline = isBidding ? new Date(item.biddingDeadline) : null;
+        const now = new Date();
+        const isExpired = deadline && now > deadline;
+        const timeLeftMinutes = deadline && !isExpired ? Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60)) : 0;
+        const timeLeft = timeLeftMinutes >= 60 ? `${Math.ceil(timeLeftMinutes / 60)}h` : `${timeLeftMinutes}ph`;
+        const biddersCount = item.biddingBrokers?.length || 0;
+
+        return (
+            <View className={`bg-white p-3 rounded-2xl shadow-sm mb-4 mx-1 ${isBidding ? 'border-2 border-purple-300' : 'border border-gray-100'}`}>
+                <View className="flex-row">
+                    <Image
+                        source={{ uri: item.image || 'https://via.placeholder.com/150' }}
+                        className="w-28 h-28 rounded-xl bg-gray-200"
+                        resizeMode="cover"
+                    />
+                    <View className="flex-1 ml-3 justify-between py-1">
+                        <View>
+                            <View className="flex-row justify-between items-start mb-1">
+                                <View className={`px-2 py-1 rounded-md ${isBidding ? 'bg-purple-50 border border-purple-200' : 'bg-red-50 border border-red-100'}`}>
+                                    <Text className={`text-[10px] font-bold uppercase ${isBidding ? 'text-purple-600' : 'text-red-500'}`}>
+                                        {isBidding ? '🎲 ĐẤU GIÁ' : 'CHỜ DUYỆT'}
+                                    </Text>
+                                </View>
+                                <Text className="text-[10px] text-gray-400 font-rubik">
+                                    {new Date(item.$createdAt).toLocaleDateString('vi-VN')}
+                                </Text>
                             </View>
-                            <Text className="text-[10px] text-gray-400 font-rubik">
-                                {new Date(item.$createdAt).toLocaleDateString('vi-VN')}
+                            <Text className="font-rubik-bold text-base text-gray-800 leading-5" numberOfLines={2}>
+                                {item.name}
                             </Text>
+                            <View className="flex-row items-center mt-1">
+                                <Ionicons name="location-sharp" size={10} color="#9CA3AF" />
+                                <Text className="text-gray-500 text-xs ml-1 font-rubik" numberOfLines={1}>
+                                    {item.address}
+                                </Text>
+                            </View>
                         </View>
-                        <Text className="font-rubik-bold text-base text-gray-800 leading-5" numberOfLines={2}>
-                            {item.name}
+                        <Text className="text-[#0061FF] font-rubik-bold text-lg">
+                            {item.price?.toLocaleString('vi-VN')} đ
                         </Text>
-                        <View className="flex-row items-center mt-1">
-                            <Ionicons name="location-sharp" size={10} color="#9CA3AF" />
-                            <Text className="text-gray-500 text-xs ml-1 font-rubik" numberOfLines={1}>
-                                {item.address}
-                            </Text>
-                        </View>
                     </View>
-                    <Text className="text-[#0061FF] font-rubik-bold text-lg">
-                        {item.price?.toLocaleString('vi-VN')} đ
-                    </Text>
                 </View>
+                
+                {isBidding && !isExpired && (
+                    <View className="mt-2 bg-purple-50 p-2 rounded-lg border border-purple-100">
+                        <Text className="text-xs text-purple-700 font-rubik-medium">
+                            ⏱️ Còn {timeLeft} | 👥 {biddersCount} môi giới đã đăng ký
+                        </Text>
+                    </View>
+                )}
+                
+                <View className="h-[1px] bg-gray-100 my-3" />
+                
+                {isAlreadyBid ? (
+                    <View className="bg-gray-100 py-3 rounded-xl flex-row justify-center items-center">
+                        <Ionicons name="checkmark-circle" size={18} color="#666" />
+                        <Text className="text-gray-600 font-rubik-bold ml-2 text-sm">Đã đăng ký</Text>
+                    </View>
+                ) : (
+                    <TouchableOpacity
+                        onPress={() => handlePickTask(item.$id)}
+                        className={`py-3 rounded-xl flex-row justify-center items-center shadow-md ${isBidding ? 'bg-purple-500 shadow-purple-200 active:bg-purple-600' : 'bg-red-500 shadow-red-200 active:bg-red-600'}`}
+                    >
+                        <Ionicons name={isBidding ? "trophy" : "hand-right"} size={18} color="white" />
+                        <Text className="text-white font-rubik-bold ml-2 text-sm">
+                            {isBidding ? 'Đăng ký nhận tin' : 'Nhận Duyệt Tin Này'}
+                        </Text>
+                    </TouchableOpacity>
+                )}
             </View>
-            <View className="h-[1px] bg-gray-100 my-3" />
-            <TouchableOpacity
-                onPress={() => handlePickTask(item.$id)}
-                className="bg-red-500 py-3 rounded-xl flex-row justify-center items-center shadow-red-200 shadow-md active:bg-red-600"
-            >
-                <Ionicons name="hand-right" size={18} color="white" />
-                <Text className="text-white font-rubik-bold ml-2 text-sm">Nhận Duyệt Tin Này</Text>
-            </TouchableOpacity>
-        </View>
-    );
+        );
+    };
 
     return (
         <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>

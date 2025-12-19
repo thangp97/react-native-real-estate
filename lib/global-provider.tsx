@@ -1,6 +1,7 @@
 import { useAppwrite } from "@/lib/useAppwrite";
-import { createContext, ReactNode, useContext } from "react";
+import { createContext, ReactNode, useContext, useEffect } from "react";
 import { getCurrentUser } from "./appwrite";
+import { startBiddingScheduler, stopBiddingScheduler } from "./bidding-scheduler";
 
 interface User {
     $id: string;
@@ -37,6 +38,22 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
 
     // Type assertion to match User interface since getCurrentUser returns a merged object
     const typedUser = user as unknown as User | null;
+
+    // Khởi động bidding scheduler khi user đã đăng nhập
+    useEffect(() => {
+        if (isLogged && typedUser) {
+            console.log('👤 User đã đăng nhập, khởi động bidding scheduler...');
+            startBiddingScheduler();
+        } else {
+            // Dừng scheduler khi user logout
+            stopBiddingScheduler();
+        }
+
+        // Cleanup khi component unmount
+        return () => {
+            stopBiddingScheduler();
+        };
+    }, [isLogged]);
 
     return (
         <GlobalContext.Provider value={{

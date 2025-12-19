@@ -25,14 +25,37 @@ const BrokerDashboard = () => {
             setLoading(true);
 
             try {
-                // 1. Gọi API Backend để cập nhật DB
+                // Kiểm tra xem property có đang trong chế độ bidding không
+                const property = pendingProps.find(p => p.$id === propertyId);
+                
+                if (property && property.biddingStatus === 'open' && property.biddingDeadline) {
+                    const deadline = new Date(property.biddingDeadline);
+                    const now = new Date();
+                    
+                    if (now < deadline) {
+                        // Đang trong thời gian bidding -> submit bid
+                        const { submitBid } = await import('@/lib/api/broker');
+                        await submitBid(propertyId, user.$id);
+                        
+                        Alert.alert(
+                            "Đã đăng ký!", 
+                            "Bạn đã đăng ký nhận tin này. Hệ thống sẽ chọn môi giới sau khi hết thời hạn.",
+                            [{ text: "OK" }]
+                        );
+                        
+                        // Refresh để cập nhật UI
+                        await fetchData();
+                        return;
+                    }
+                }
+                
+                // Nếu không có bidding hoặc đã hết hạn bidding -> assign trực tiếp
                 await assignPropertyToBroker(propertyId, user.$id);
 
-                // 2. Thông báo thành công
+                // Thông báo thành công
                 Alert.alert("Thành công", "Bạn đã nhận duyệt tin này. Nó đã được chuyển vào mục Đang quản lý.");
 
-                // 3. Cập nhật UI ngay lập tức (Optimistic UI)
-                // Xóa tin khỏi danh sách Pending cục bộ
+                // Cập nhật UI ngay lập tức (Optimistic UI)
                 setPendingProps(prev => prev.filter(prop => prop.$id !== propertyId));
 
                 // Cập nhật số liệu thống kê cục bộ
@@ -42,10 +65,8 @@ const BrokerDashboard = () => {
                     myActiveCount: prev.myActiveCount + 1
                 }));
 
-                // LƯU Ý: Không gọi fetchData() ở đây để tránh Race Condition (Server chưa kịp index)
-
             } catch (e: any) {
-                Alert.alert("Lỗi", "Không thể nhận duyệt tin. Vui lòng kiểm tra lại kết nối hoặc quyền hạn.");
+                Alert.alert("Lỗi", e.message || "Không thể nhận duyệt tin. Vui lòng kiểm tra lại kết nối hoặc quyền hạn.");
 
                 // Nếu lỗi xảy ra, tải lại dữ liệu để đảm bảo hiển thị đúng trạng thái từ server
                 await fetchData();
@@ -173,40 +194,70 @@ const BrokerDashboard = () => {
                 {pendingProps.length === 0 ? (
                     <Text className="text-gray-400 text-center py-4">Tuyệt vời! Hiện không có tin nào cần duyệt.</Text>
                 ) : (
-                    pendingProps.map((item) => (
-                        <View
-                            key={item.$id}
-                            className="bg-white p-4 rounded-xl shadow-sm mb-3 border-l-4 border-l-red-500"
-                        >
-                             <View className="flex-row items-start">
-                                <Image
-                                    source={{ uri: item.image }}
-                                    className="w-16 h-16 bg-gray-200 rounded-lg mr-4"
-                                />
-                                <View className="flex-1">
-                                    <View className="flex-row justify-between items-center">
-                                        <Text className="text-xs text-red-600 font-bold bg-red-100 px-2 py-0.5 rounded">CHỜ DUYỆT</Text>
-                                        <Text className="text-xs text-gray-400">{new Date(item.$createdAt).toLocaleDateString()}</Text>
-                                    </View>
+                    pendingProps.map((item) => {
+                        const isBidding = item.biddingStatus === 'open' && item.biddingDeadline;
+                        const isAlreadyBid = item.biddingBrokers?.includes(user?.$id);
+                        const deadline = isBidding ? new Date(item.biddingDeadline) : null;
+                        const now = new Date();
+                        const isExpired = deadline && now > deadline;
+                        const timeLeftMinutes = deadline && !isExpired ? Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60)) : 0;
+                        const timeLeft = timeLeftMinutes >= 60 ? `${Math.ceil(timeLeftMinutes / 60)}h` : `${timeLeftMinutes}ph`;
+                        const biddersCount = item.biddingBrokers?.length || 0;
 
-                                    <Text className="font-rubik-medium text-base text-black-300 mt-1" numberOfLines={1}>
-                                        {item.name}
-                                    </Text>
-                                    <Text className="text-gray-500 text-xs mt-1" numberOfLines={1}>{item.address}</Text>
-                                    <Text className="text-[#0061FF] font-rubik-bold mt-1">{item.price} VNĐ</Text>
-                                </View>
-                            </View>
-
-                            {/* Nút nhận việc */}
-                            <TouchableOpacity
-                                onPress={() => handlePickTask(item.$id)}
-                                className="mt-3 bg-red-500 py-2 rounded-lg flex-row justify-center items-center"
+                        return (
+                            <View
+                                key={item.$id}
+                                className={`bg-white p-4 rounded-xl shadow-sm mb-3 border-l-4 ${isBidding ? 'border-l-purple-500' : 'border-l-red-500'}`}
                             >
-                                <Ionicons name="hand-right" size={16} color="white" />
-                                <Text className="text-white font-rubik-medium ml-2">Nhận Duyệt Tin</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ))
+                                <View className="flex-row items-start">
+                                    <Image
+                                        source={{ uri: item.image }}
+                                        className="w-16 h-16 bg-gray-200 rounded-lg mr-4"
+                                    />
+                                    <View className="flex-1">
+                                        <View className="flex-row justify-between items-center">
+                                            <Text className={`text-xs font-bold px-2 py-0.5 rounded ${isBidding ? 'text-purple-600 bg-purple-100' : 'text-red-600 bg-red-100'}`}>
+                                                {isBidding ? '🎲 ĐẤU GIÁ' : 'CHỜ DUYỆT'}
+                                            </Text>
+                                            <Text className="text-xs text-gray-400">{new Date(item.$createdAt).toLocaleDateString()}</Text>
+                                        </View>
+
+                                        <Text className="font-rubik-medium text-base text-black-300 mt-1" numberOfLines={1}>
+                                            {item.name}
+                                        </Text>
+                                        <Text className="text-gray-500 text-xs mt-1" numberOfLines={1}>{item.address}</Text>
+                                        <Text className="text-[#0061FF] font-rubik-bold mt-1">{item.price} VNĐ</Text>
+
+                                        {isBidding && !isExpired && (
+                                            <View className="mt-2 bg-purple-50 p-2 rounded">
+                                                <Text className="text-xs text-purple-700">
+                                                    ⏱️ Còn {timeLeft} | 👥 {biddersCount} môi giới đã đăng ký
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                </View>
+
+                                {/* Nút nhận việc */}
+                                {isAlreadyBid ? (
+                                    <View className="mt-3 bg-gray-200 py-2 rounded-lg flex-row justify-center items-center">
+                                        <Ionicons name="checkmark-circle" size={16} color="#666" />
+                                        <Text className="text-gray-600 font-rubik-medium ml-2">Đã đăng ký</Text>
+                                    </View>
+                                ) : (
+                                    <TouchableOpacity
+                                        onPress={() => handlePickTask(item.$id)}
+                                        className={`mt-3 py-2 rounded-lg flex-row justify-center items-center ${isBidding ? 'bg-purple-500' : 'bg-red-500'}`}
+                                    >
+                                        <Ionicons name={isBidding ? "trophy" : "hand-right"} size={16} color="white" />
+                                        <Text className="text-white font-rubik-medium ml-2">
+                                            {isBidding ? 'Đăng ký nhận tin' : 'Nhận Duyệt Tin'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        );
+                    })
                 )}
                  <View className="h-20" />
             </ScrollView>
